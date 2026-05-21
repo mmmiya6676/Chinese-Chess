@@ -1,0 +1,21 @@
+# 编译产物
+chess.exe
+*.o
+*.exe
+build/
+release/
+
+# 存档文件
+game.txt
+saves/
+
+# 项目文档（非代码）
+1/
+
+# IDE 用户配置
+.vscode/
+.claude/
+
+# 系统文件
+Thumbs.db
+Desktop.ini
