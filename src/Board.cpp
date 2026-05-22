@@ -268,11 +268,12 @@ bool Board::isCheckmate(Color color)const{
         vector<Position<int>>moves=piece->getValidMoves(*this);
         //遍历所有有效移动（包含挡将军以及将帅的移动躲避）
         for(const Position<int>&tagert:moves){
-            ChessPiece* temp=const_cast<Board*>(this)->movePiece(piece->getPosition(),tagert);
+            Position<int> originalPos = piece->getPosition();  // 保存原位（movePiece 后会变）
+            ChessPiece* temp=const_cast<Board*>(this)->movePiece(originalPos,tagert);
             //尝试移动棋子
             bool stillInCheck=isKingInCheck(color);
             //如果移动后被将军，就返回 false
-            const_cast<Board*>(this)->undoMove(piece->getPosition(),tagert,temp);
+            const_cast<Board*>(this)->undoMove(originalPos,tagert,temp);
             //撤销继续遍历其他有效移动
             if(!stillInCheck){
                 canEscape=true;
