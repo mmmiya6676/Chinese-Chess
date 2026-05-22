@@ -299,6 +299,8 @@ ostream& operator<<(ostream& os, const Board& board) {
             ChessPiece* p = board.m_grid[i][j];
             if (p == nullptr) {
                 os << " . ";
+            } else if (p->getColor() == Color::RED) {
+                os << " \033[31m" << p->getSymbol() << "\033[0m";  // 红色显示
             } else {
                 os << " " << p->getSymbol();
             }
