@@ -31,7 +31,8 @@ using namespace std;
  *  - 首字节 >= 0x80（非ASCII，即中文字符）→ 按记谱法解析
  *  - 首字节 < 0x80（ASCII）→ 可能是命令(U/S/L/R/Q)或坐标
  */
-void playGame(Game& game, int moveTimeLimit = MOVE_TIME_LIMIT) {
+void playGame(Game& game, const string& redName, const string& blackName,
+               int moveTimeLimit = MOVE_TIME_LIMIT) {
     while (!game.isGameOver()) {
         system("cls");  // 清屏，保持界面整洁
         cout << game << endl;  // 输出棋盘（调用 operator<<）
@@ -42,7 +43,7 @@ void playGame(Game& game, int moveTimeLimit = MOVE_TIME_LIMIT) {
         cout << "每步限时: " << moveTimeLimit << " 秒" << endl;
         cout << "----------------------------------------" << endl;
         cout << "输入: 坐标(x1 y1 x2 y2) | 记谱法(炮二平五) | 命令" << endl;
-        cout << "U悔棋  R重做  S保存  L读档  F认输  P和棋  Q退出" << endl;
+        cout << "U悔棋  R重做  S保存  L读档  F认输  P和棋  T排行  Q退出" << endl;
 
         // 本回合限时倒计时（失败不走棋时时间不重置，继续倒数）
         auto turnStart = chrono::steady_clock::now();
@@ -62,6 +63,8 @@ void playGame(Game& game, int moveTimeLimit = MOVE_TIME_LIMIT) {
                  << "方超时! 胜利者: "
                  << (game.getCurrentPlayer() == Color::RED ? "黑" : "红") << "方" << endl;
             cout << "========================================" << endl;
+            recordGameResult(redName, blackName,
+                (game.getCurrentPlayer() == Color::RED) ? "黑" : "红");
             system("pause");
             return;
         }
@@ -122,6 +125,8 @@ void playGame(Game& game, int moveTimeLimit = MOVE_TIME_LIMIT) {
                      << "方认输! 胜利者: "
                      << (game.getCurrentPlayer() == Color::RED ? "黑" : "红") << "方" << endl;
                 cout << "========================================" << endl;
+                recordGameResult(redName, blackName,
+                    (game.getCurrentPlayer() == Color::RED) ? "黑" : "红");
                 system("pause");
                 return;
             }
@@ -137,9 +142,15 @@ void playGame(Game& game, int moveTimeLimit = MOVE_TIME_LIMIT) {
                 cout << "========================================" << endl;
                 cout << "  双方同意和棋 —— 平手!" << endl;
                 cout << "========================================" << endl;
+                recordGameDraw(redName, blackName);
                 system("pause");
                 return;
             }
+        }
+        else if (input[0] == 't' || input[0] == 'T') {
+            // ---- 查看排行榜 ----
+            showLeaderboard();
+            system("pause");
         }
         else if (input[0] == 'q' || input[0] == 'Q') {
             // ---- 退出：询问是否保存 ----
@@ -194,13 +205,15 @@ void playGame(Game& game, int moveTimeLimit = MOVE_TIME_LIMIT) {
         }
     }
 
-    // 游戏结束（将死或主动退出）—— 展示最终棋盘
+    // 游戏结束（将死）—— 展示最终棋盘并记录排行榜
     system("cls");
     cout << game << endl;
     cout << "========================================" << endl;
     cout << "  游戏结束! 胜利者: "
          << (game.getWinner() == Color::RED ? "红" : "黑") << "方" << endl;
     cout << "========================================" << endl;
+    recordGameResult(redName, blackName,
+        (game.getWinner() == Color::RED) ? "红" : "黑");
     system("pause");
 }
 
@@ -277,7 +290,7 @@ int main() {
             cout << "按任意键开始游戏..." << endl;
             system("pause > nul");
 
-            playGame(game, timeLimit);  // 进入游戏主循环
+            playGame(game, redName, blackName, timeLimit);
         }
         else if (choice == "2") {
             // ===== 加载存档 =====
@@ -290,8 +303,23 @@ int main() {
                 system("pause");
                 continue;
             }
-            game.setSaveFilename(fname);  // 绑定加载的文件路径
-            playGame(game);  // 进入游戏主循环
+            game.setSaveFilename(fname);
+            // 从文件名提取玩家名: "saves/红方 vs 黑方 play0.txt"
+            string base = fname;
+            // 去掉 "saves/" 前缀
+            size_t slash = base.find('/');
+            if (slash != string::npos) base = base.substr(slash + 1);
+            // 去掉 " playN.txt" 后缀
+            size_t playPos = base.find(" play");
+            if (playPos != string::npos) base = base.substr(0, playPos);
+            // 按 " vs " 分割
+            size_t vsPos = base.find(" vs ");
+            string loadRed = "红方", loadBlack = "黑方";
+            if (vsPos != string::npos) {
+                loadRed  = base.substr(0, vsPos);
+                loadBlack = base.substr(vsPos + 4);
+            }
+            playGame(game, loadRed, loadBlack);
         }
         else if (choice == "3") {
             // ===== 退出程序 =====

@@ -9,8 +9,10 @@
 
 #include "../include/SaveManager.h"
 #include <iostream>
+#include <fstream>
 #include <cstdlib>
 #include <algorithm>
+#include <tuple>
 #include <filesystem>
 using namespace std;
 namespace fs = std::filesystem;
@@ -103,4 +105,97 @@ string showLoadMenu() {
     if (choice > 0 && choice <= (int)files.size())
         return "saves/" + files[choice - 1];
     return "";
+}
+
+// ============================================================
+//  排行榜
+// ============================================================
+
+// 排行榜文件路径
+static const string LEADERBOARD_FILE = "saves/leaderboard.txt";
+
+// 读排行榜，返回每行 [名字, 胜场, 总场]
+static vector<tuple<string, int, int>> loadLeaderboard() {
+    vector<tuple<string, int, int>> result;
+    ifstream file(LEADERBOARD_FILE);
+    if (!file) return result;
+    string name;
+    int wins = 0, total = 0;
+    while (file >> name >> wins >> total) {
+        if (!name.empty())
+            result.emplace_back(name, wins, total);
+    }
+    return result;
+}
+
+// 写排行榜
+static void saveLeaderboard(const vector<tuple<string, int, int>>& data) {
+    ofstream file(LEADERBOARD_FILE);
+    for (const auto& [name, wins, total] : data)
+        file << name << " " << wins << " " << total << "\n";
+}
+
+// 更新或添加某个玩家的记录
+static void updatePlayer(vector<tuple<string, int, int>>& data,
+                          const string& name, bool isWin) {
+    for (auto& [n, wins, total] : data) {
+        if (n == name) {
+            total += 1;
+            if (isWin) wins += 1;
+            return;
+        }
+    }
+    // 新玩家
+    data.emplace_back(name, isWin ? 1 : 0, 1);
+}
+
+void recordGameResult(const string& red, const string& black,
+                      const string& winner) {
+    ensureDir("saves");
+    auto data = loadLeaderboard();
+    bool redWin = (winner == "红" || winner == "RED");
+    updatePlayer(data, red,   redWin);
+    updatePlayer(data, black, !redWin);
+    saveLeaderboard(data);
+}
+
+void recordGameDraw(const string& red, const string& black) {
+    ensureDir("saves");
+    auto data = loadLeaderboard();
+    // 和棋：双方各记一场，无胜者
+    updatePlayer(data, red,   false);
+    updatePlayer(data, black, false);
+    saveLeaderboard(data);
+}
+
+void showLeaderboard() {
+    auto data = loadLeaderboard();
+    if (data.empty()) {
+        cout << "===== 排行榜 =====" << endl;
+        cout << "（暂无对局记录）" << endl;
+        return;
+    }
+
+    // 按 胜率 → 胜场 → 总场 排序（降序）
+    sort(data.begin(), data.end(),
+         [](const auto& a, const auto& b) {
+            double rateA = (get<2>(a) > 0) ? (double)get<1>(a) / get<2>(a) : 0;
+            double rateB = (get<2>(b) > 0) ? (double)get<1>(b) / get<2>(b) : 0;
+            if (rateA != rateB) return rateA > rateB;
+            if (get<1>(a) != get<1>(b)) return get<1>(a) > get<1>(b);
+            return get<2>(a) > get<2>(b);
+         });
+
+    system("cls");
+    cout << "===== 排行榜 =====" << endl;
+    cout << "排名  玩家        胜场  总场  胜率" << endl;
+    cout << "--------------------------------" << endl;
+    int rank = 1;
+    for (const auto& [name, wins, total] : data) {
+        double rate = (total > 0) ? 100.0 * wins / total : 0;
+        cout << " " << rank << ".   " << name << "        " << wins << "    " << total << "    ";
+        cout << (int)(rate + 0.5) << "%" << endl;
+        rank++;
+    }
+    cout << "================================" << endl;
 }

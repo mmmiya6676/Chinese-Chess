@@ -19,4 +19,14 @@ int nextPlayNumber(const std::string& red, const std::string& black);
 // 弹出存档选择菜单，返回选中的完整路径，用户取消返回空
 std::string showLoadMenu();
 
+// 记录对局结果：winner 胜，loser 负
+void recordGameResult(const std::string& red, const std::string& black,
+                      const std::string& winner);
+
+// 记录和棋：双方各记一场，无胜者
+void recordGameDraw(const std::string& red, const std::string& black);
+
+// 显示排行榜
+void showLeaderboard();
+
 #endif // SAVEMANAGER_H
