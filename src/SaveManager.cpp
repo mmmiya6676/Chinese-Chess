@@ -13,7 +13,6 @@
 #include <iomanip>
 #include <cstdlib>
 #include <algorithm>
-#include <tuple>
 #include <filesystem>
 using namespace std;
 namespace fs = std::filesystem;
@@ -115,39 +114,45 @@ string showLoadMenu() {
 // 排行榜文件路径
 static const string LEADERBOARD_FILE = "saves/leaderboard.txt";
 
-// 读排行榜，返回每行 [名字, 胜场, 总场]
-static vector<tuple<string, int, int>> loadLeaderboard() {
-    vector<tuple<string, int, int>> result;
+// 单个玩家的排行榜记录
+struct PlayerRecord {
+    string name;
+    int    wins  = 0;
+    int    total = 0;
+};
+
+// 读排行榜
+static vector<PlayerRecord> loadLeaderboard() {
+    vector<PlayerRecord> result;
     ifstream file(LEADERBOARD_FILE);
     if (!file) return result;
-    string name;
-    int wins = 0, total = 0;
-    while (file >> name >> wins >> total) {
-        if (!name.empty())
-            result.emplace_back(name, wins, total);
+    PlayerRecord r;
+    while (file >> r.name >> r.wins >> r.total) {
+        if (!r.name.empty())
+            result.push_back(r);
     }
     return result;
 }
 
 // 写排行榜
-static void saveLeaderboard(const vector<tuple<string, int, int>>& data) {
+static void saveLeaderboard(const vector<PlayerRecord>& data) {
     ofstream file(LEADERBOARD_FILE);
-    for (const auto& [name, wins, total] : data)
-        file << name << " " << wins << " " << total << "\n";
+    for (const auto& r : data)
+        file << r.name << " " << r.wins << " " << r.total << "\n";
 }
 
 // 更新或添加某个玩家的记录
-static void updatePlayer(vector<tuple<string, int, int>>& data,
+static void updatePlayer(vector<PlayerRecord>& data,
                           const string& name, bool isWin) {
-    for (auto& [n, wins, total] : data) {
-        if (n == name) {
-            total += 1;
-            if (isWin) wins += 1;
+    for (auto& r : data) {
+        if (r.name == name) {
+            r.total += 1;
+            if (isWin) r.wins += 1;
             return;
         }
     }
     // 新玩家
-    data.emplace_back(name, isWin ? 1 : 0, 1);
+    data.push_back({name, isWin ? 1 : 0, 1});
 }
 
 void recordGameResult(const string& red, const string& black,
@@ -163,7 +168,6 @@ void recordGameResult(const string& red, const string& black,
 void recordGameDraw(const string& red, const string& black) {
     ensureDir("saves");
     auto data = loadLeaderboard();
-    // 和棋：双方各记一场，无胜者
     updatePlayer(data, red,   false);
     updatePlayer(data, black, false);
     saveLeaderboard(data);
@@ -179,12 +183,12 @@ void showLeaderboard() {
 
     // 按 胜率 → 胜场 → 总场 排序（降序）
     sort(data.begin(), data.end(),
-         [](const auto& a, const auto& b) {
-            double rateA = (get<2>(a) > 0) ? (double)get<1>(a) / get<2>(a) : 0;
-            double rateB = (get<2>(b) > 0) ? (double)get<1>(b) / get<2>(b) : 0;
+         [](const PlayerRecord& a, const PlayerRecord& b) {
+            double rateA = (a.total > 0) ? (double)a.wins / a.total : 0;
+            double rateB = (b.total > 0) ? (double)b.wins / b.total : 0;
             if (rateA != rateB) return rateA > rateB;
-            if (get<1>(a) != get<1>(b)) return get<1>(a) > get<1>(b);
-            return get<2>(a) > get<2>(b);
+            if (a.wins != b.wins) return a.wins > b.wins;
+            return a.total > b.total;
          });
 
     system("cls");
@@ -196,12 +200,12 @@ void showLeaderboard() {
          << right << setw(8)  << "胜率" << endl;
     cout << "----------------------------------------" << endl;
     int rank = 1;
-    for (const auto& [name, wins, total] : data) {
-        double rate = (total > 0) ? 100.0 * wins / total : 0;
+    for (const auto& r : data) {
+        double rate = (r.total > 0) ? 100.0 * r.wins / r.total : 0;
         cout << left  << setw(6)  << to_string(rank) + "."
-             << left  << setw(16) << name
-             << right << setw(6)  << wins
-             << right << setw(6)  << total
+             << left  << setw(16) << r.name
+             << right << setw(6)  << r.wins
+             << right << setw(6)  << r.total
              << right << setw(7)  << (int)(rate + 0.5) << "%" << endl;
         rank++;
     }
