@@ -10,6 +10,7 @@
 #include "../include/SaveManager.h"
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <cstdlib>
 #include <algorithm>
 #include <tuple>
@@ -188,14 +189,21 @@ void showLeaderboard() {
 
     system("cls");
     cout << "===== 排行榜 =====" << endl;
-    cout << "排名  玩家        胜场  总场  胜率" << endl;
-    cout << "--------------------------------" << endl;
+    cout << left  << setw(6)  << "排名"
+         << left  << setw(16) << "玩家"
+         << right << setw(6)  << "胜场"
+         << right << setw(6)  << "总场"
+         << right << setw(8)  << "胜率" << endl;
+    cout << "----------------------------------------" << endl;
     int rank = 1;
     for (const auto& [name, wins, total] : data) {
         double rate = (total > 0) ? 100.0 * wins / total : 0;
-        cout << " " << rank << ".   " << name << "        " << wins << "    " << total << "    ";
-        cout << (int)(rate + 0.5) << "%" << endl;
+        cout << left  << setw(6)  << to_string(rank) + "."
+             << left  << setw(16) << name
+             << right << setw(6)  << wins
+             << right << setw(6)  << total
+             << right << setw(7)  << (int)(rate + 0.5) << "%" << endl;
         rank++;
     }
-    cout << "================================" << endl;
+    cout << "========================================" << endl;
 }
