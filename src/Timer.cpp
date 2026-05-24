@@ -57,9 +57,6 @@ static void timerThreadFunc(TimerData* data) {
         data->remaining--;
 
         // ---- 更新计时行 ----
-        CONSOLE_SCREEN_BUFFER_INFO curInfo;
-        GetConsoleScreenBufferInfo(hOut, &curInfo);
-
         // 跳到计时行，刷新数字
         COORD timerPos = {0, data->timerLineY};
         SetConsoleCursorPosition(hOut, timerPos);

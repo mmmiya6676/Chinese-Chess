@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <cstdlib>
 #include <algorithm>
+#include <map>
 #include <filesystem>
 using namespace std;
 namespace fs = std::filesystem;
@@ -61,12 +62,58 @@ int extractPlayNumber(const string& filename) {
     catch (...) { return -1; }
 }
 
-/*
- * 扫描已有存档，找出 {红方} vs {黑方} 的最大 play 编号，+1 返回。
- * 如果没有旧存档，返回 0。
- */
-int nextPlayNumber(const string& red, const string& black) {
-    string prefix = red + " vs " + black + " play";
+// ============================================================
+//  玩家注册表（名字 → 数字ID，解决中文文件名编码问题）
+// ============================================================
+
+static const string PLAYERS_FILE = "saves/players.dat";
+
+static map<int, string> loadPlayerRegistry() {
+    map<int, string> result;
+    ifstream file(PLAYERS_FILE);
+    if (!file) return result;
+    string line;
+    while (getline(file, line)) {
+        size_t colon = line.find(':');
+        if (colon != string::npos) {
+            int id = stoi(line.substr(0, colon));
+            result[id] = line.substr(colon + 1);
+        }
+    }
+    return result;
+}
+
+static void savePlayerRegistry(const map<int, string>& reg) {
+    ofstream file(PLAYERS_FILE);
+    for (auto& [id, name] : reg)
+        file << id << ":" << name << "\n";
+}
+
+int getOrCreatePlayerID(const string& name) {
+    ensureDir("saves");
+    auto reg = loadPlayerRegistry();
+    for (auto& [id, n] : reg)
+        if (n == name) return id;
+    int newID = 1;
+    while (reg.count(newID)) newID++;
+    reg[newID] = name;
+    savePlayerRegistry(reg);
+    return newID;
+}
+
+string getPlayerName(int id) {
+    auto reg = loadPlayerRegistry();
+    auto it = reg.find(id);
+    return (it != reg.end()) ? it->second : ("玩家" + to_string(id));
+}
+
+string buildSaveFilename(int redID, int blackID, int playN) {
+    return "saves/" + to_string(redID) + "_vs_" + to_string(blackID)
+           + "_play" + to_string(playN) + ".txt";
+}
+
+int nextPlayNumber(int redID, int blackID) {
+    string prefix = to_string(redID) + "_vs_" + to_string(blackID) + "_play";
     int maxN = -1;
     for (const auto& f : listSaveFiles()) {
         if (f.find(prefix) == 0) {
@@ -77,10 +124,10 @@ int nextPlayNumber(const string& red, const string& black) {
     return maxN + 1;
 }
 
-/*
- * 存档选择菜单：列出所有存档让用户选一个。
- * 返回完整路径；用户选0返回空。
- */
+// ============================================================
+//  存档选择菜单
+// ============================================================
+
 string showLoadMenu() {
     system("cls");
     auto files = listSaveFiles();
@@ -94,8 +141,23 @@ string showLoadMenu() {
     }
 
     cout << "===== 存档列表 =====" << endl;
-    for (size_t i = 0; i < files.size(); ++i)
-        cout << (i + 1) << ". " << files[i] << endl;
+    auto reg = loadPlayerRegistry();  // 把文件名的数字ID翻译成中文名
+    for (size_t i = 0; i < files.size(); ++i) {
+        string display = files[i];
+        // 尝试解析 "1_vs_2_play0.txt" → "张三 vs 李四 play0.txt"
+        size_t vsPos = files[i].find("_vs_");
+        size_t playPos = files[i].find("_play");
+        if (vsPos != string::npos && playPos != string::npos) {
+            try {
+                int rid = stoi(files[i].substr(0, vsPos));
+                int bid = stoi(files[i].substr(vsPos + 4, playPos - vsPos - 4));
+                string rn = reg.count(rid) ? reg[rid] : ("ID" + to_string(rid));
+                string bn = reg.count(bid) ? reg[bid] : ("ID" + to_string(bid));
+                display = rn + " vs " + bn + " " + files[i].substr(playPos + 1);
+            } catch (...) {}
+        }
+        cout << (i + 1) << ". " << display << endl;
+    }
     cout << "0. 返回" << endl;
     cout << "请选择: ";
 

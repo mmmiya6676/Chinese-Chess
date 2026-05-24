@@ -446,6 +446,8 @@ bool Game::saveGame(const std::string& filename)const{
 bool Game::loadGame(const std::string& filename){
     m_board.clear();
     std::ifstream file(filename);
+    if(!file) return false;
+
     std::string line;
     std::getline(file,line);
     if(     line=="==============当前执棋方:红==============="){
@@ -467,92 +469,30 @@ bool Game::loadGame(const std::string& filename){
     if(line.find("红方:") != 0){
         return false;
     }
-    while(std::getline(file,line)){
-        if(line.empty()){
-            return false;
+
+    // 先扫描整个文件，判断是否包含"步法记录:"
+    // 如果有步法记录就从初始局面回放，跳过棋子列表解析
+    bool hasMoveHistory = false;
+    {
+        std::streampos savedPos = file.tellg();  // 记住当前位置（红方第一行的开头）
+        std::string scanLine;
+        while(std::getline(file, scanLine)){
+            if(scanLine.rfind("步", 0) == 0){
+                hasMoveHistory = true;
+                break;
+            }
         }
-        if(line.rfind("黑", 0) == 0){
-            break;
-        }
-        std::istringstream iss(line);
-        std::string symbol;
-        int x=0, y=0;
-        iss >> symbol >> x >> y;
-        if(!m_board.isPositionValid(Position<int>(x,y))){
-            return false;
-        }
-        if(m_board.getPieceAt(Position<int>(x,y))!=nullptr){
-            return false;
-        }
-        if(symbol=="炮"){
-            m_board.placePiece(new Cannon(Color::RED,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="帅"){
-            m_board.placePiece(new King(Color::RED,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="仕"){
-            m_board.placePiece(new Advisor(Color::RED,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="马"){
-            m_board.placePiece(new Knight(Color::RED,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="相"){
-            m_board.placePiece(new Elephant(Color::RED,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="兵"){
-            m_board.placePiece(new Pawn(Color::RED,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="车"){
-            m_board.placePiece(new Rook(Color::RED,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else{
-            return false;
-        }
+        file.clear();                // 清除 EOF 标志
+        file.seekg(savedPos);        // 回到红方第一行
     }
-    while(std::getline(file,line)){
-        if(line.empty()){
-            return false;
+
+    if(hasMoveHistory){
+        // 跳过所有棋子列表行（红方+黑方），直接读步法记录
+        while(std::getline(file, line)){
+            if(line.rfind("步", 0) == 0) break;
         }
-        if(line.rfind("步", 0) == 0){
-            break;
-        }
-        std::istringstream iss(line);
-        std::string symbol;
-        int x=0, y=0;
-        iss >> symbol >> x >> y;
-        if(!m_board.isPositionValid(Position<int>(x,y))){
-            return false;
-        }
-        if(m_board.getPieceAt(Position<int>(x,y))!=nullptr){
-            return false;
-        }
-        if(symbol=="炮"){
-            m_board.placePiece(new Cannon(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="将"){
-            m_board.placePiece(new King(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="车"){
-            m_board.placePiece(new Rook(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="马"){
-            m_board.placePiece(new Knight(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="卒"){
-            m_board.placePiece(new Pawn(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="士"){
-            m_board.placePiece(new Advisor(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else if(symbol=="象"){
-            m_board.placePiece(new Elephant(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
-        }
-        else{
-            return false;
-        }
-    }
-    // 读取步法记录并回放重建
-    if(line.rfind("步", 0) == 0){
+
+        // 解析步法记录
         std::vector<Move> loadedMoves;
         while(std::getline(file, line)){
             if(line.empty()) break;
@@ -563,7 +503,8 @@ bool Game::loadGame(const std::string& filename){
             }
             loadedMoves.emplace_back(Position<int>(fx, fy), Position<int>(tx, ty));
         }
-        m_board.clear();
+
+        // 从初始局面回放所有走法
         m_board.initialize();
         m_currentPlayer = Color::RED;
         m_moveCount = 0;
@@ -572,6 +513,89 @@ bool Game::loadGame(const std::string& filename){
         while(!m_redoStack.empty()) m_redoStack.pop();
         for(const auto& move : loadedMoves){
             if(!makeMove(move.from, move.to)){
+                return false;
+            }
+        }
+    } else {
+        // 没有步法记录，按棋子列表解析（兼容旧版存档）
+        while(std::getline(file,line)){
+            if(line.empty()){
+                return false;
+            }
+            if(line.rfind("黑", 0) == 0){
+                break;
+            }
+            std::istringstream iss(line);
+            std::string symbol;
+            int x=0, y=0;
+            iss >> symbol >> x >> y;
+            if(!m_board.isPositionValid(Position<int>(x,y))){
+                return false;
+            }
+            if(m_board.getPieceAt(Position<int>(x,y))!=nullptr){
+                return false;
+            }
+            if(symbol=="炮"){
+                m_board.placePiece(new Cannon(Color::RED,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="帅"){
+                m_board.placePiece(new King(Color::RED,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="仕"){
+                m_board.placePiece(new Advisor(Color::RED,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="马"){
+                m_board.placePiece(new Knight(Color::RED,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="相"){
+                m_board.placePiece(new Elephant(Color::RED,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="兵"){
+                m_board.placePiece(new Pawn(Color::RED,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="车"){
+                m_board.placePiece(new Rook(Color::RED,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else{
+                return false;
+            }
+        }
+        while(std::getline(file,line)){
+            if(line.empty()){
+                return false;
+            }
+            std::istringstream iss(line);
+            std::string symbol;
+            int x=0, y=0;
+            iss >> symbol >> x >> y;
+            if(!m_board.isPositionValid(Position<int>(x,y))){
+                return false;
+            }
+            if(m_board.getPieceAt(Position<int>(x,y))!=nullptr){
+                return false;
+            }
+            if(symbol=="炮"){
+                m_board.placePiece(new Cannon(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="将"){
+                m_board.placePiece(new King(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="车"){
+                m_board.placePiece(new Rook(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="马"){
+                m_board.placePiece(new Knight(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="卒"){
+                m_board.placePiece(new Pawn(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="士"){
+                m_board.placePiece(new Advisor(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else if(symbol=="象"){
+                m_board.placePiece(new Elephant(Color::BLACK,Position<int>(x,y)),Position<int>(x,y));
+            }
+            else{
                 return false;
             }
         }
