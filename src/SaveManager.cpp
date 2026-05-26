@@ -82,7 +82,7 @@ static map<int, string> loadPlayerRegistry() {
     }
     return result;
 }
-
+// 写玩家注册表，格式：每行 "ID:Name"
 static void savePlayerRegistry(const map<int, string>& reg) {
     ofstream file(PLAYERS_FILE);
     for (auto& [id, name] : reg)
@@ -92,8 +92,10 @@ static void savePlayerRegistry(const map<int, string>& reg) {
 int getOrCreatePlayerID(const string& name) {
     ensureDir("saves");
     auto reg = loadPlayerRegistry();
+    //原排行榜有记录
     for (auto& [id, n] : reg)
         if (n == name) return id;
+    //新玩家，分配新ID
     int newID = 1;
     while (reg.count(newID)) newID++;
     reg[newID] = name;

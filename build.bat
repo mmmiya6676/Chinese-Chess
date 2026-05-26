@@ -2,9 +2,9 @@
 cd /d "%~dp0"
 
 echo ====================================
-echo   Building with GCC 14.2 (POSIX)...
+echo   Building with GCC 16.1 (MSYS2)...
 echo ====================================
-D:\MinGW-posix\mingw64\bin\g++.exe -std=c++17 -fexec-charset=UTF-8 -finput-charset=UTF-8 -I include src/*.cpp -o chess.exe 2>&1
+D:\MSYS2\mingw64\bin\g++.exe -std=c++17 -fexec-charset=UTF-8 -finput-charset=UTF-8 -I include src/*.cpp -o chess.exe 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ====================================

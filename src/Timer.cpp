@@ -44,6 +44,7 @@ struct TimerData {
  *   │ > 炮二_                    │  ← inputLineY（getline 在这里等用户打字）
  *   └────────────────────────────┘
  */
+//计时线程
 static void timerThreadFunc(TimerData* data) {
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 

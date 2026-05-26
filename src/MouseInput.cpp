@@ -13,6 +13,7 @@
 
 #include "../include/MouseInput.h"
 #include "../include/SaveManager.h"
+#include "../include/Timer.h"
 #include <iostream>
 #include <sstream>
 #include <windows.h>
@@ -20,7 +21,6 @@
 #include <vector>
 using namespace std;
 
-extern const int MOVE_TIME_LIMIT;
 
 // 控制台缓冲区顶部被滚动了多少行（窗口第一行 = 缓冲区第几行）
 static int g_scrollY = 0;
@@ -313,10 +313,37 @@ InputResult mouseInputLoop(Game& game) {
                 cout << "--- 键盘输入模式 (ESC=取消，输空回车=返回) ---" << endl;
                 cout << "坐标(x1 y1 x2 y2) | 记谱法(炮二平五) | 命令" << endl;
                 cout << "U悔棋 R重做 S保存 L读档 F认输 P和棋 T排行 Q退出" << endl;
-                cout << "> " << flush;
+                // 重新计算实际剩余时间，避免因事件处理耗时导致计时偏差
+                auto kbNow = chrono::steady_clock::now();
+                int kbElapsed = chrono::duration_cast<chrono::seconds>(kbNow - startTime).count();
+                int kbRemaining = MOVE_TIME_LIMIT - kbElapsed;
+                if (kbRemaining <= 0) {
+                    system("cls");
+                    cout << game << endl;
+                    cout << "========================================" << endl;
+                    cout << "  " << (game.getCurrentPlayer() == Color::RED ? "红" : "黑")
+                         << "方超时! 胜利者: "
+                         << (game.getCurrentPlayer() == Color::RED ? "黑" : "红") << "方" << endl;
+                    cout << "========================================" << endl;
+                    system("pause");
+                    SetConsoleMode(hIn, oldMode);
+                    return InputResult::Move;
+                }
+                bool timeout = false;
+                string kbInput = getInputWithTimer(kbRemaining, timeout);
 
-                string kbInput;
-                getline(cin, kbInput);  // getline 走 IME，中文输入法完全正常工作
+                if (timeout) {
+                    system("cls");
+                    cout << game << endl;
+                    cout << "========================================" << endl;
+                    cout << "  " << (game.getCurrentPlayer() == Color::RED ? "红" : "黑")
+                         << "方超时! 胜利者: "
+                         << (game.getCurrentPlayer() == Color::RED ? "黑" : "红") << "方" << endl;
+                    cout << "========================================" << endl;
+                    system("pause");
+                    SetConsoleMode(hIn, oldMode);
+                    return InputResult::Move;
+                }
 
                 // 切回鼠标原始模式
                 DWORD restore = oldMode;
