@@ -5,7 +5,6 @@
 #include "ChessPiece.h"
 #include <vector>
 #include <iostream>
-#include <string>
 
 // 棋盘类：管理所有棋子
 class Board {
@@ -84,8 +83,6 @@ private:
     // 持有所有棋子的所有权，方便析构和深拷贝
     std::vector<ChessPiece*> m_pieces;
 
-    // 在指定位置放置棋子
-    
 };
 
 #endif // BOARD_H

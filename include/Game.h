@@ -6,8 +6,6 @@
 #include "ChessPiece.h"
 #include <stack>
 #include <string>
-#include <chrono>
-#include <fstream>
 // 游戏主逻辑类
 class Game {
 public:

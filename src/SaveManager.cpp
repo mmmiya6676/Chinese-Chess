@@ -13,7 +13,7 @@
 #include <iomanip>
 #include <cstdlib>
 #include <algorithm>
-#include <tuple>
+#include <map>
 #include <filesystem>
 using namespace std;
 namespace fs = std::filesystem;
@@ -62,12 +62,58 @@ int extractPlayNumber(const string& filename) {
     catch (...) { return -1; }
 }
 
-/*
- * 扫描已有存档，找出 {红方} vs {黑方} 的最大 play 编号，+1 返回。
- * 如果没有旧存档，返回 0。
- */
-int nextPlayNumber(const string& red, const string& black) {
-    string prefix = red + " vs " + black + " play";
+// ============================================================
+//  玩家注册表（名字 → 数字ID，解决中文文件名编码问题）
+// ============================================================
+
+static const string PLAYERS_FILE = "saves/players.dat";
+
+static map<int, string> loadPlayerRegistry() {
+    map<int, string> result;
+    ifstream file(PLAYERS_FILE);
+    if (!file) return result;
+    string line;
+    while (getline(file, line)) {
+        size_t colon = line.find(':');
+        if (colon != string::npos) {
+            int id = stoi(line.substr(0, colon));
+            result[id] = line.substr(colon + 1);
+        }
+    }
+    return result;
+}
+
+static void savePlayerRegistry(const map<int, string>& reg) {
+    ofstream file(PLAYERS_FILE);
+    for (auto& [id, name] : reg)
+        file << id << ":" << name << "\n";
+}
+
+int getOrCreatePlayerID(const string& name) {
+    ensureDir("saves");
+    auto reg = loadPlayerRegistry();
+    for (auto& [id, n] : reg)
+        if (n == name) return id;
+    int newID = 1;
+    while (reg.count(newID)) newID++;
+    reg[newID] = name;
+    savePlayerRegistry(reg);
+    return newID;
+}
+
+string getPlayerName(int id) {
+    auto reg = loadPlayerRegistry();
+    auto it = reg.find(id);
+    return (it != reg.end()) ? it->second : ("玩家" + to_string(id));
+}
+
+string buildSaveFilename(int redID, int blackID, int playN) {
+    return "saves/" + to_string(redID) + "_vs_" + to_string(blackID)
+           + "_play" + to_string(playN) + ".txt";
+}
+
+int nextPlayNumber(int redID, int blackID) {
+    string prefix = to_string(redID) + "_vs_" + to_string(blackID) + "_play";
     int maxN = -1;
     for (const auto& f : listSaveFiles()) {
         if (f.find(prefix) == 0) {
@@ -78,10 +124,10 @@ int nextPlayNumber(const string& red, const string& black) {
     return maxN + 1;
 }
 
-/*
- * 存档选择菜单：列出所有存档让用户选一个。
- * 返回完整路径；用户选0返回空。
- */
+// ============================================================
+//  存档选择菜单
+// ============================================================
+
 string showLoadMenu() {
     system("cls");
     auto files = listSaveFiles();
@@ -95,8 +141,23 @@ string showLoadMenu() {
     }
 
     cout << "===== 存档列表 =====" << endl;
-    for (size_t i = 0; i < files.size(); ++i)
-        cout << (i + 1) << ". " << files[i] << endl;
+    auto reg = loadPlayerRegistry();  // 把文件名的数字ID翻译成中文名
+    for (size_t i = 0; i < files.size(); ++i) {
+        string display = files[i];
+        // 尝试解析 "1_vs_2_play0.txt" → "张三 vs 李四 play0.txt"
+        size_t vsPos = files[i].find("_vs_");
+        size_t playPos = files[i].find("_play");
+        if (vsPos != string::npos && playPos != string::npos) {
+            try {
+                int rid = stoi(files[i].substr(0, vsPos));
+                int bid = stoi(files[i].substr(vsPos + 4, playPos - vsPos - 4));
+                string rn = reg.count(rid) ? reg[rid] : ("ID" + to_string(rid));
+                string bn = reg.count(bid) ? reg[bid] : ("ID" + to_string(bid));
+                display = rn + " vs " + bn + " " + files[i].substr(playPos + 1);
+            } catch (...) {}
+        }
+        cout << (i + 1) << ". " << display << endl;
+    }
     cout << "0. 返回" << endl;
     cout << "请选择: ";
 
@@ -115,39 +176,55 @@ string showLoadMenu() {
 // 排行榜文件路径
 static const string LEADERBOARD_FILE = "saves/leaderboard.txt";
 
-// 读排行榜，返回每行 [名字, 胜场, 总场]
-static vector<tuple<string, int, int>> loadLeaderboard() {
-    vector<tuple<string, int, int>> result;
+// 单个玩家的排行榜记录
+struct PlayerRecord {
+    string name;
+    int    wins  = 0;
+    int    total = 0;
+};
+
+// 读排行榜（按行读取，从行尾反向解析数字，名字含空格/中文都不影响）
+static vector<PlayerRecord> loadLeaderboard() {
+    vector<PlayerRecord> result;
     ifstream file(LEADERBOARD_FILE);
     if (!file) return result;
-    string name;
-    int wins = 0, total = 0;
-    while (file >> name >> wins >> total) {
+    string line;
+    while (getline(file, line)) {
+        if (line.empty()) continue;
+        // 从行尾找最后一个空格 → total
+        size_t sp2 = line.rfind(' ');
+        if (sp2 == string::npos) continue;
+        // 从 total 前面找倒数第二个空格 → wins
+        size_t sp1 = line.rfind(' ', sp2 - 1);
+        if (sp1 == string::npos) continue;
+        string name  = line.substr(0, sp1);
+        int wins     = stoi(line.substr(sp1 + 1, sp2 - sp1 - 1));
+        int total    = stoi(line.substr(sp2 + 1));
         if (!name.empty())
-            result.emplace_back(name, wins, total);
+            result.push_back({name, wins, total});
     }
     return result;
 }
 
 // 写排行榜
-static void saveLeaderboard(const vector<tuple<string, int, int>>& data) {
+static void saveLeaderboard(const vector<PlayerRecord>& data) {
     ofstream file(LEADERBOARD_FILE);
-    for (const auto& [name, wins, total] : data)
-        file << name << " " << wins << " " << total << "\n";
+    for (const auto& r : data)
+        file << r.name << " " << r.wins << " " << r.total << "\n";
 }
 
 // 更新或添加某个玩家的记录
-static void updatePlayer(vector<tuple<string, int, int>>& data,
+static void updatePlayer(vector<PlayerRecord>& data,
                           const string& name, bool isWin) {
-    for (auto& [n, wins, total] : data) {
-        if (n == name) {
-            total += 1;
-            if (isWin) wins += 1;
+    for (auto& r : data) {
+        if (r.name == name) {
+            r.total += 1;
+            if (isWin) r.wins += 1;
             return;
         }
     }
     // 新玩家
-    data.emplace_back(name, isWin ? 1 : 0, 1);
+    data.push_back({name, isWin ? 1 : 0, 1});
 }
 
 void recordGameResult(const string& red, const string& black,
@@ -163,7 +240,6 @@ void recordGameResult(const string& red, const string& black,
 void recordGameDraw(const string& red, const string& black) {
     ensureDir("saves");
     auto data = loadLeaderboard();
-    // 和棋：双方各记一场，无胜者
     updatePlayer(data, red,   false);
     updatePlayer(data, black, false);
     saveLeaderboard(data);
@@ -179,12 +255,12 @@ void showLeaderboard() {
 
     // 按 胜率 → 胜场 → 总场 排序（降序）
     sort(data.begin(), data.end(),
-         [](const auto& a, const auto& b) {
-            double rateA = (get<2>(a) > 0) ? (double)get<1>(a) / get<2>(a) : 0;
-            double rateB = (get<2>(b) > 0) ? (double)get<1>(b) / get<2>(b) : 0;
+         [](const PlayerRecord& a, const PlayerRecord& b) {
+            double rateA = (a.total > 0) ? (double)a.wins / a.total : 0;
+            double rateB = (b.total > 0) ? (double)b.wins / b.total : 0;
             if (rateA != rateB) return rateA > rateB;
-            if (get<1>(a) != get<1>(b)) return get<1>(a) > get<1>(b);
-            return get<2>(a) > get<2>(b);
+            if (a.wins != b.wins) return a.wins > b.wins;
+            return a.total > b.total;
          });
 
     system("cls");
@@ -196,12 +272,12 @@ void showLeaderboard() {
          << right << setw(8)  << "胜率" << endl;
     cout << "----------------------------------------" << endl;
     int rank = 1;
-    for (const auto& [name, wins, total] : data) {
-        double rate = (total > 0) ? 100.0 * wins / total : 0;
+    for (const auto& r : data) {
+        double rate = (r.total > 0) ? 100.0 * r.wins / r.total : 0;
         cout << left  << setw(6)  << to_string(rank) + "."
-             << left  << setw(16) << name
-             << right << setw(6)  << wins
-             << right << setw(6)  << total
+             << left  << setw(16) << r.name
+             << right << setw(6)  << r.wins
+             << right << setw(6)  << r.total
              << right << setw(7)  << (int)(rate + 0.5) << "%" << endl;
         rank++;
     }

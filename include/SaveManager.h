@@ -13,8 +13,15 @@ void ensureDir(const std::string& path);
 // 从文件名提取 play 编号（"张三 vs 李四 play3.txt" → 3）
 int extractPlayNumber(const std::string& filename);
 
-// 计算同对玩家的下一个 play 编号
-int nextPlayNumber(const std::string& red, const std::string& black);
+// 玩家名 → 数字ID（解决中文文件名编码问题）
+int  getOrCreatePlayerID(const std::string& name);
+std::string getPlayerName(int id);
+
+// 用数字 ID 生成存档文件名
+std::string buildSaveFilename(int redID, int blackID, int playN);
+
+// 计算同对玩家的下一个 play 编号（用ID）
+int nextPlayNumber(int redID, int blackID);
 
 // 弹出存档选择菜单，返回选中的完整路径，用户取消返回空
 std::string showLoadMenu();
