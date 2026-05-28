@@ -39,8 +39,10 @@ NewGameDialog::NewGameDialog(QWidget *parent) : QDialog(parent) {
 
     // 表单布局：标签 + 输入框 成对排列
     auto *form = new QFormLayout;
-    m_redEdit   = new QLineEdit("红方");   // 默认文字 "红方"，用户可直接修改
-    m_blackEdit = new QLineEdit("黑方");
+    m_redEdit   = new QLineEdit;
+    m_redEdit->setPlaceholderText("请输入红方名字");
+    m_blackEdit = new QLineEdit;
+    m_blackEdit->setPlaceholderText("请输入黑方名字");
     form->addRow("红方:", m_redEdit);
     form->addRow("黑方:", m_blackEdit);
     layout->addLayout(form);
