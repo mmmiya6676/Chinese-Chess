@@ -1,0 +1,24 @@
+# Qt/C++ 编译产物
+release/
+debug/
+build/
+*.o
+*.obj
+moc_*
+ui_*.h
+qrc_*.cpp
+*.exe
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+
+# qmake 生成的 Makefile
+Makefile
+Makefile.Debug
+Makefile.Release
+
+# 编译包装脚本（本地环境依赖）
+gcc-msys2.bat
+g++-msys2.bat
+.qmake.stash
