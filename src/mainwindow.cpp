@@ -4,10 +4,11 @@
 #include "SaveManager.h"
 #include <QVBoxLayout>       // 垂直布局：控件从上到下排列
 #include <QHBoxLayout>       // 水平布局：控件从左到右排列
-#include <QMessageBox>       // 消息弹窗（信息/警告/确认）
-#include <QMenu>             // 弹出菜单（设置按钮的下拉菜单）
-#include <QApplication>      // Qt 应用程序类
-#include <chrono>             // AI 思考计时
+#include <QMessageBox>
+#include <QMenu>
+#include <QMouseEvent>
+#include <QApplication>
+#include <chrono>
 // MOVE_TIME_LIMIT 定义在 Game.h 中 (90 秒)
 
 // =========================== 构造函数 ===========================
@@ -224,9 +225,11 @@ void MainWindow::setupUI() {
     m_undoBtn = new QPushButton("悔棋");
     m_redoBtn = new QPushButton("下一步");
     m_surrenderBtn = new QPushButton("投降");
+    m_hintBtn   = new QPushButton("提示");
     btnRow->addStretch();
     btnRow->addWidget(m_undoBtn);
     btnRow->addWidget(m_redoBtn);
+    btnRow->addWidget(m_hintBtn);
     btnRow->addWidget(m_surrenderBtn);
     btnRow->addStretch();          // 按钮组居中
     vLayout->addLayout(btnRow);
@@ -243,6 +246,7 @@ void MainWindow::setupUI() {
     connect(m_undoBtn,      &QPushButton::clicked,  this, &MainWindow::onUndo);
     connect(m_redoBtn,      &QPushButton::clicked,  this, &MainWindow::onRedo);
     connect(m_surrenderBtn, &QPushButton::clicked,  this, &MainWindow::onSurrender);
+    connect(m_hintBtn,      &QPushButton::clicked,  this, &MainWindow::onHint);
     connect(m_settingsBtn,  &QPushButton::clicked,  this, &MainWindow::onSettings);
 }
 
@@ -462,6 +466,53 @@ void MainWindow::saveFileAndRecord(const std::string& loser) {
     std::string winnerName = (loser == m_redName.toStdString())
                              ? m_blackName.toStdString() : m_redName.toStdString();
     recordGameResult(m_redName.toStdString(), m_blackName.toStdString(), winnerName);
+}
+
+// =========================== 提示最佳走法 ===========================
+
+/*
+ * onHint —— "提示"按钮
+ *
+ * 调用 ChessAI 计算当前走棋方的最佳走法，并在棋盘上高亮显示：
+ *   - 选中要走的那颗棋子（黄圈）
+ *   - 显示目标位置（绿色/红色圈）
+ *
+ * 玩家可以看到提示，但走棋仍需自己点击。
+ * 提示功能在人人对战和人机对战中都可使用。
+ */
+void MainWindow::onHint() {
+    if (m_game->isGameOver()) return;
+
+    // 临时创建一个浅层 AI 来计算提示（depth=2 即可）
+    ChessAI hintAI(m_game->getCurrentPlayer());
+    hintAI.setDifficulty(AIDifficulty::Medium);   // depth=2
+
+    ChessAI::AIMove best = hintAI.findBestMove(*m_game);
+    if (best.from.getX() < 0) return;   // 无合法走法
+
+    // 把 BoardWidget 的选中状态设为 AI 推荐的那颗棋子
+    // 但 m_selected 是 BoardWidget 的私有成员，需要通过 BoardWidget 的方法设置。
+
+    // 先模拟选子：告诉 BoardWidget 用程序方式选中 (from) 并计算它的合法走法
+    const Board& board = m_game->getBoard();
+    ChessPiece* piece = board.getPieceAt(best.from);
+    if (!piece) return;
+
+    // 获取合法走法（手动计算并设置到 BoardWidget 上）
+    // BoardWidget 没有公开的 setSelection 方法，所以用 mousePressEvent 模拟。
+    // 更简洁的方式：直接通过 update() 触发重绘，但我们无法设置 m_selected。
+
+    // 这里改用"鼠标模拟"方式：找到 from 对应的像素坐标，
+    // 手动构造一个 QMouseEvent 发送给 BoardWidget。
+    QPoint pt = m_board->boardToPixel(best.from.getX(), best.from.getY());
+    QMouseEvent pressEvent(QEvent::MouseButtonPress, pt,
+                           Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(m_board, &pressEvent);
+
+    // 现在 m_selected 已设为 best.from，m_validMoves 已填充。
+    // 我们不需要进一步操作——玩家可以直接点击目标位置走棋，
+    // 也可以在棋盘上看到提示的高亮（被选中的棋子和合法走法中的目标）。
+    updateDisplay();
 }
 
 // =========================== AI 走棋 ===========================

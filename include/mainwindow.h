@@ -47,7 +47,8 @@ private slots:
     void onSave();                 // 保存游戏 → 写入存档文件
     void onLeaderboard();          // 打开排行榜弹窗
     void onQuit();                 // 退出游戏 → 确认后关闭窗口
-    void doAIMove();               // AI 计算并走一步（通过 QTimer::singleShot 延迟调用）
+    void doAIMove();               // AI 计算并走一步
+    void onHint();                 // 提示最佳走法
 
 private:
     void setupUI();                // 搭建界面布局
@@ -70,6 +71,7 @@ private:
     QPushButton *m_undoBtn;
     QPushButton *m_redoBtn;
     QPushButton *m_surrenderBtn;
+    QPushButton *m_hintBtn;
     QPushButton *m_settingsBtn;
 
     QTimer *m_timer;
