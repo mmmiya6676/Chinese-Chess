@@ -15,6 +15,7 @@ NewGameDialog::NewGameDialog(QWidget *parent) : QDialog(parent) {
         "QLineEdit { font: 14px '楷体'; color: black; padding: 4px; border: 2px solid #8b7355; border-radius: 4px; }"
         "QCheckBox { font: 14px '楷体'; color: black; }"
         "QComboBox { font: 14px '楷体'; color: black; padding: 4px; border: 2px solid #8b7355; border-radius: 4px; background: #fff8f0; }"
+        "QComboBox QAbstractItemView { color: black; selection-background-color: #8b7355; }"
         "QPushButton { font: 14px '楷体'; padding: 6px 20px;"
         "  background-color: #8b7355; color: white; border-radius: 4px; }"
         "QPushButton:hover { background-color: #6b5345; }"
