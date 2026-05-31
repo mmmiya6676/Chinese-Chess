@@ -8,10 +8,7 @@
  */
 
 #include "../include/SaveManager.h"
-#include <iostream>
 #include <fstream>
-#include <iomanip>
-#include <cstdlib>
 #include <algorithm>
 #include <map>
 #include <filesystem>
@@ -103,12 +100,6 @@ int getOrCreatePlayerID(const string& name) {
     return newID;
 }
 
-string getPlayerName(int id) {
-    auto reg = loadPlayerRegistry();
-    auto it = reg.find(id);
-    return (it != reg.end()) ? it->second : ("玩家" + to_string(id));
-}
-
 string buildSaveFilename(int redID, int blackID, int playN) {
     return "saves/" + to_string(redID) + "_vs_" + to_string(blackID)
            + "_play" + to_string(playN) + ".txt";
@@ -124,51 +115,6 @@ int nextPlayNumber(int redID, int blackID) {
         }
     }
     return maxN + 1;
-}
-
-// ============================================================
-//  存档选择菜单
-// ============================================================
-
-string showLoadMenu() {
-    system("cls");
-    auto files = listSaveFiles();
-
-    if (files.empty()) {
-        cout << "===== 存档列表 =====" << endl;
-        cout << "（暂无存档文件）" << endl;
-        cout << "请按任意键返回..." << endl;
-        system("pause > nul");
-        return "";
-    }
-
-    cout << "===== 存档列表 =====" << endl;
-    auto reg = loadPlayerRegistry();  // 把文件名的数字ID翻译成中文名
-    for (size_t i = 0; i < files.size(); ++i) {
-        string display = files[i];
-        // 尝试解析 "1_vs_2_play0.txt" → "张三 vs 李四 play0.txt"
-        size_t vsPos = files[i].find("_vs_");
-        size_t playPos = files[i].find("_play");
-        if (vsPos != string::npos && playPos != string::npos) {
-            try {
-                int rid = stoi(files[i].substr(0, vsPos));
-                int bid = stoi(files[i].substr(vsPos + 4, playPos - vsPos - 4));
-                string rn = reg.count(rid) ? reg[rid] : ("ID" + to_string(rid));
-                string bn = reg.count(bid) ? reg[bid] : ("ID" + to_string(bid));
-                display = rn + " vs " + bn + " " + files[i].substr(playPos + 1);
-            } catch (...) {}
-        }
-        cout << (i + 1) << ". " << display << endl;
-    }
-    cout << "0. 返回" << endl;
-    cout << "请选择: ";
-
-    int choice;
-    cin >> choice;
-    cin.ignore();
-    if (choice > 0 && choice <= (int)files.size())
-        return "saves/" + files[choice - 1];
-    return "";
 }
 
 // ============================================================
@@ -237,53 +183,6 @@ void recordGameResult(const string& red, const string& black,
     updatePlayer(data, red,   redWin);
     updatePlayer(data, black, !redWin);
     saveLeaderboard(data);
-}
-
-void recordGameDraw(const string& red, const string& black) {
-    ensureDir("saves");
-    auto data = loadLeaderboard();
-    updatePlayer(data, red,   false);
-    updatePlayer(data, black, false);
-    saveLeaderboard(data);
-}
-
-void showLeaderboard() {
-    auto data = loadLeaderboard();
-    if (data.empty()) {
-        cout << "===== 排行榜 =====" << endl;
-        cout << "（暂无对局记录）" << endl;
-        return;
-    }
-
-    // 按 胜率 → 胜场 → 总场 排序（降序）
-    sort(data.begin(), data.end(),
-         [](const PlayerRecord& a, const PlayerRecord& b) {
-            double rateA = (a.total > 0) ? (double)a.wins / a.total : 0;
-            double rateB = (b.total > 0) ? (double)b.wins / b.total : 0;
-            if (rateA != rateB) return rateA > rateB;
-            if (a.wins != b.wins) return a.wins > b.wins;
-            return a.total > b.total;
-         });
-
-    system("cls");
-    cout << "===== 排行榜 =====" << endl;
-    cout << left  << setw(6)  << "排名"
-         << left  << setw(16) << "玩家"
-         << right << setw(6)  << "胜场"
-         << right << setw(6)  << "总场"
-         << right << setw(8)  << "胜率" << endl;
-    cout << "----------------------------------------" << endl;
-    int rank = 1;
-    for (const auto& r : data) {
-        double rate = (r.total > 0) ? 100.0 * r.wins / r.total : 0;
-        cout << left  << setw(6)  << to_string(rank) + "."
-             << left  << setw(16) << r.name
-             << right << setw(6)  << r.wins
-             << right << setw(6)  << r.total
-             << right << setw(7)  << (int)(rate + 0.5) << "%" << endl;
-        rank++;
-    }
-    cout << "========================================" << endl;
 }
 
 // Qt 可用的排行榜数据

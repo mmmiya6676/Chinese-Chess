@@ -7,12 +7,7 @@
 #include <QMessageBox>       // 消息弹窗（信息/警告/确认）
 #include <QMenu>             // 弹出菜单（设置按钮的下拉菜单）
 #include <QApplication>      // Qt 应用程序类
-
-/*
- * extern —— 告诉编译器：MOVE_TIME_LIMIT 定义在 Timer.cpp 里，
- * 这里只是引用它。值是 90（每步 90 秒倒计时）。
- */
-extern const int MOVE_TIME_LIMIT;
+// MOVE_TIME_LIMIT 定义在 Game.h 中 (90 秒)
 
 // =========================== 构造函数 ===========================
 

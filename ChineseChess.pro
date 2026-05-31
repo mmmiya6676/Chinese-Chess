@@ -25,8 +25,7 @@ SOURCES += \
     src/Pawn.cpp \
     src/Position.cpp \
     src/Rook.cpp \
-    src/SaveManager.cpp \
-    src/Timer.cpp
+    src/SaveManager.cpp
 
 HEADERS += \
     include/boardwidget.h \
@@ -46,8 +45,7 @@ HEADERS += \
     include/Pawn.h \
     include/Position.h \
     include/Rook.h \
-    include/SaveManager.h \
-    include/Timer.h
+    include/SaveManager.h
 
 INCLUDEPATH += include
 

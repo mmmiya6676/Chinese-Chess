@@ -6,6 +6,9 @@
 #include "ChessPiece.h"
 #include <stack>
 #include <string>
+
+const int MOVE_TIME_LIMIT = 90;  // 每步棋限时（秒）
+
 // 游戏主逻辑类
 class Game {
 public:
