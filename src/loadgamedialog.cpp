@@ -1,31 +1,22 @@
+/*
+ * loadgamedialog.cpp —— 读档选择弹窗
+ * ===================================
+ *
+ * 【QListWidget 是什么？】
+ *   列表控件，像一个文件列表。常用方法：
+ *     addItem("文字")   — 添加一项
+ *     count()           — 总共有几项
+ *     currentRow()      — 当前选中第几行（0 开始，未选 = -1）
+ *     doubleClicked 信号 — 双击某行时触发
+ */
+
 #include "loadgamedialog.h"
-#include "SaveManager.h"    // listSaveFiles() 等存档管理函数
+#include "SaveManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QPushButton>       // 按钮控件
+#include <QPushButton>
 #include <QLabel>
 
-/*
- * LoadGameDialog —— 读档选择弹窗实现
- * ------------------------------------
- * 界面：
- *   ┌──────────────────────┐
- *   │  === 存档列表 ===    │
- *   │  ┌────────────────┐  │
- *   │  │ 1_vs_2_play1   │  │  ← QListWidget 列表
- *   │  │ 1_vs_2_play2   │  │  ← 双击直接读档
- *   │  │ ...            │  │
- *   │  └────────────────┘  │
- *   │       [读档] [取消]   │
- *   └──────────────────────┘
- *
- * m_files 和 m_list 的关系：
- *   m_files[0] = "1_vs_2_play1.txt"   ←→ m_list->item(0) 显示 "1_vs_2_play1"
- *   m_files[1] = "1_vs_2_play2.txt"   ←→ m_list->item(1) 显示 "1_vs_2_play2"
- *
- *   显示时去掉 .txt 后缀更清爽。
- *   选择时用 currentRow() 作为索引，从 m_files 取出完整文件名。
- */
 LoadGameDialog::LoadGameDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle("读档游戏");
     setFixedSize(420, 350);
@@ -41,14 +32,20 @@ LoadGameDialog::LoadGameDialog(QWidget *parent) : QDialog(parent) {
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel("=== 存档列表 ==="));
 
-    // 创建列表控件
     m_list = new QListWidget;
     layout->addWidget(m_list);
 
-    // listSaveFiles() 扫描 saves/ 目录，返回文件名列表
+    /*
+     * listSaveFiles() 扫描 saves/ 目录下所有 .txt 文件，
+     * 返回排序后的文件名列表（不含路径前缀）。
+     *
+     * 显示时去掉 ".txt" 后缀让列表更干净。
+     * m_files 和 m_list 通过行号（index）对应：
+     *   m_files[0] = "1_vs_2_play1.txt"
+     *   m_list 第0行显示 "1_vs_2_play1"
+     */
     m_files = listSaveFiles();
     for (const auto& f : m_files) {
-        // 去掉 ".txt" 后缀再显示（列表里看起来更整洁）
         std::string display = f;
         if (display.size() > 4 && display.substr(display.size() - 4) == ".txt")
             display = display.substr(0, display.size() - 4);
@@ -57,7 +54,6 @@ LoadGameDialog::LoadGameDialog(QWidget *parent) : QDialog(parent) {
     if (m_files.empty())
         m_list->addItem("（暂无存档文件）");
 
-    // 按钮
     auto *loadBtn   = new QPushButton("读档");
     auto *cancelBtn = new QPushButton("取消");
     auto *btnLayout = new QHBoxLayout;
@@ -66,17 +62,16 @@ LoadGameDialog::LoadGameDialog(QWidget *parent) : QDialog(parent) {
     btnLayout->addWidget(cancelBtn);
     layout->addLayout(btnLayout);
 
-    // "读档"按钮 → accept() → exec() 返回 Accepted
+    // accept() → exec() 返回 Accepted → main.cpp 继续处理
     connect(loadBtn,   &QPushButton::clicked, this, &QDialog::accept);
-    // "取消"按钮 → reject() → exec() 返回 Rejected
+    // reject() → exec() 返回 Rejected → main.cpp 不处理
     connect(cancelBtn, &QPushButton::clicked, this, [this]() { reject(); });
-    // 双击列表项也能读档
+    // 双击列表项也等同于点"读档"
     connect(m_list, &QListWidget::doubleClicked, this, &QDialog::accept);
 }
 
-// 返回用户选择的完整文件名（含 .txt），未选返回空字符串
 std::string LoadGameDialog::selectedFile() const {
-    int row = m_list->currentRow();   // 返回当前选中的行号，未选返回 -1
+    int row = m_list->currentRow();
     if (row < 0 || row >= (int)m_files.size()) return "";
     return m_files[row];
 }

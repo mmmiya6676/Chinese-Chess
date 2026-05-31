@@ -1,121 +1,126 @@
+/*
+ * boardwidget.cpp —— 棋盘控件（核心可视化组件）
+ * =============================================
+ *
+ * 【QPainter —— Qt 的"画笔"】
+ *   Qt 的程序绘制都是通过 QPainter 完成的。它是一个"绘图引擎"，
+ *   提供画线、画圆、写文字、填色等所有绘图操作。
+ *
+ *   重要规则：QPainter 只能在 paintEvent() 里创建和使用。
+ *   不能在其他地方保存 QPainter 对象然后复用。
+ *
+ *   常用方法：
+ *     drawLine(x1,y1, x2,y2)     画直线
+ *     drawRect(x,y, w,h)         画矩形
+ *     drawEllipse(QPointF, rx,ry) 画椭圆（rx=ry=半径时就是圆）
+ *     drawText(QRect, align, text) 写文字
+ *     fillRect(QRect, color)      填充矩形
+ *
+ *   QPen（笔）：控制线条的颜色、粗细、虚实
+ *   QBrush（刷）：控制填充的颜色、渐变、纹理
+ *   两者配合使用：pen 画轮廓，brush 填内部。
+ *
+ * 【paintEvent —— "你来画吧"事件】
+ *   Qt 绘制是"被动"的——不是你想画就画，而是等着 Qt 叫你画。
+ *   以下情况会触发 paintEvent：
+ *     1. 窗口第一次显示
+ *     2. 调用了 update()（标记"需要重绘"，Qt 下次有空就调用 paintEvent）
+ *     3. 调用了 repaint()（立即重绘，不等事件队列）
+ *     4. 窗口被遮挡后重新露出
+ *     5. 窗口从最小化恢复
+ *
+ *   update() 和 repaint() 的区别：
+ *     update()  — 异步，把"需要重绘"标记放进事件队列，Qt 空闲时执行。
+ *                 多次 update() 可能合并为一次 paintEvent，效率高。
+ *     repaint() — 同步，立即绘制，不等事件队列。
+ *                 会阻塞当前代码，一般不推荐，只在紧急需要立即刷新时用。
+ *
+ * 【QRadialGradient —— 径向渐变】
+ *   从圆心向外辐射的颜色渐变，用来模拟棋子的立体感。
+ *   setColorAt(0, color) — 圆心处的颜色（亮）
+ *   setColorAt(1, color) — 边缘处的颜色（暗）
+ *
+ * 【QMouseEvent —— 鼠标事件】
+ *   event->pos() 返回点击位置在控件内的像素坐标（从控件左上角算）。
+ *   Qt::LeftButton 表示鼠标左键。
+ *
+ * 【坐标转换】
+ *   棋盘逻辑坐标 (row, col)：row=0~9, col=0~8
+ *   屏幕像素坐标 (x, y)：控件内的像素位置
+ *   boardToPixel()：逻辑→像素
+ *   pixelToBoard()：像素→逻辑（容错：点格子中心附近就算点到那格）
+ *
+ * 【信号发射（emit）】
+ *   emit moveMade()     → MainWindow::onMoveMade 自动被调用
+ *   emit gameOverSignal() → MainWindow::onGameOver 自动被调用
+ */
+
 #include "boardwidget.h"
-#include <QPainter>       // Qt 绘图引擎，所有画线/画圆/写文字都靠它
-#include <QMouseEvent>    // 鼠标事件类，event->pos() 获取点击坐标
-#include <QFont>          // 字体描述对象
-#include <QPen>           // 画笔（控制线条颜色、粗细）
+#include <QPainter>
+#include <QMouseEvent>
+#include <QFont>
+#include <QPen>
 
 // =========================== 构造函数 ===========================
 
 BoardWidget::BoardWidget(QWidget *parent)
-    : QWidget(parent)     // 必须调用父类 QWidget 的构造函数
+    : QWidget(parent)
 {
-    /*
-     * setMinimumSize：设置控件的最小尺寸，布局系统不会把它缩得比这个还小。
-     * 这里用棋盘常量计算出像素尺寸：
-     *   宽 = 左右边距 + 8 个格子间距
-     *   高 = 上下边距 + 9 个格子间距
-     */
     setMinimumSize(MARGIN * 2 + CELL * (COLS - 1) + 20,
                    MARGIN * 2 + CELL * (ROWS - 1) + 20);
-
-    // setMouseTracking(false): 默认关闭鼠标追踪，只有按下时才接收移动事件，节省性能
-    setMouseTracking(false);
+    setMouseTracking(false);  // false=只在按下时追踪鼠标，省性能
 }
 
 // =========================== 坐标转换 ===========================
 
-/*
- * boardToPixel —— 棋盘坐标 → 屏幕像素坐标
- * 棋盘坐标体系的原点 (0,0) 是左上角第一个交叉点。
- * 像素坐标换算：x = 边距 + 列号 × 格子边长
- *              y = 边距 + 行号 × 格子边长
- */
 QPoint BoardWidget::boardToPixel(int row, int col) const {
-    int x = MARGIN + col * CELL;
-    int y = MARGIN + row * CELL;
-    return QPoint(x, y);
+    return QPoint(MARGIN + col * CELL, MARGIN + row * CELL);
 }
 
-/*
- * pixelToBoard —— 屏幕像素坐标 → 棋盘坐标
- * 鼠标点击时 event->pos() 给出像素坐标，用这个函数反算出是哪一格。
- *
- * CELL / 2.0 是半格偏移，让点击"格子中心附近"都算点中那格，提高容错。
- * 返回 {-1, -1} 表示点击在棋盘之外。
- */
 Position<int> BoardWidget::pixelToBoard(const QPoint& pt) const {
+    // + CELL/2 让格子中心附近都算点到那格，提高容错
     int col = (pt.x() - MARGIN + CELL / 2.0) / CELL;
     int row = (pt.y() - MARGIN + CELL / 2.0) / CELL;
     if (col < 0 || col >= COLS || row < 0 || row >= ROWS)
-        return {-1, -1};
+        return {-1, -1};   // 棋盘外的点击
     return {row, col};
 }
 
-/*
- * clearSelection —— 清除当前选中的棋子
- * 把 m_selected 设为无效值，清空合法走法列表，
- * 然后调用 update() 触发重绘（高亮会消失）。
- */
 void BoardWidget::clearSelection() {
     m_selected = {-1, -1};
     m_validMoves.clear();
-    update();
+    update();   // 触发重绘让高亮消失
 }
 
-// =========================== 绘制 ===========================
+// =========================== 绘制主流程 ===========================
 
-/*
- * paintEvent —— Qt 核心绘制函数（QWidget 虚函数）
- * ------------------------------------------------
- * Qt 的绘制是"被动"的——你不是主动画，而是等着 Qt 来叫你画。
- * 以下情况会触发 paintEvent：
- *   1. 窗口第一次显示
- *   2. 调用了 update()
- *   3. 窗口从最小化恢复 / 被其他窗口遮住后露出来
- *
- * QPainter 是 Qt 的绘图引擎，所有绘制操作必须通过它。
- * 这里把绘制分成三步：棋盘格线 → 高亮提示 → 棋子。
- * 绘制顺序决定了图层：先画的东西会被后画的盖住。
- */
 void BoardWidget::paintEvent(QPaintEvent *) {
-    QPainter p(this);    // QPainter 必须在 paintEvent 内创建（它依赖当前窗口的绘制上下文）
+    QPainter p(this);   // 创建画笔（必须在 paintEvent 内）
 
-    /*
-     * setRenderHint：开启抗锯齿（Anti-Aliasing），让线条和文字边缘更平滑。
-     * Antialiasing = true 时，Qt 会在边缘多画几个半透明像素。
-     */
+    // 开启抗锯齿：让圆和文字边缘平滑不锯齿
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    // 整个控件填充木色背景
+    // 先铺底色
     p.fillRect(rect(), QColor(238, 207, 161));
 
-    drawBoard(p);        // 第一步：画棋盘网格
-    drawHighlights(p);   // 第二步：画选中高亮、合法走法提示
-    drawPieces(p);       // 第三步：画棋子（最后画，保证覆盖在上面）
+    // 绘制顺序决定"谁在上面"——先画的被后画的覆盖
+    drawBoard(p);        // 1. 棋盘网格线（最底层）
+    drawHighlights(p);   // 2. 选中高亮 + 走法提示（中间层）
+    drawPieces(p);       // 3. 棋子（最上层，盖在格线上）
 }
 
-/*
- * drawBoard —— 画棋盘网格
- * ------------------------------------------------
- * 中国象棋棋盘的特点：
- *   1. 9 列 × 10 行的矩阵
- *   2. 中间有"楚河 汉界"隔断竖线
- *   3. 上下各有九宫格（用交叉斜线标记）
- *   4. 左右边界竖线和上下边界横线是连续的
- *
- * QPen   —— 画笔，控制线条的颜色和粗细
- * QFont  —— 字体，"楷体"是一种书法字体，适合中国风
- */
-void BoardWidget::drawBoard(QPainter& p) {
-    QPen gridPen(QColor(80, 50, 20), 1.5);    // 网格线：深褐色，1.5 像素粗
-    QPen borderPen(QColor(60, 30, 10), 3);     // 外框线：更深更粗
+// =========================== 棋盘网格 ===========================
 
-    // ---- 外框 ----
+void BoardWidget::drawBoard(QPainter& p) {
+    QPen gridPen(QColor(80, 50, 20), 1.5);   // 网格线：深褐色 1.5 像素
+    QPen borderPen(QColor(60, 30, 10), 3);    // 外框线：更深更粗
+
+    // 外框
     p.setPen(borderPen);
     p.drawRect(MARGIN - 8, MARGIN - 8,
                CELL * (COLS - 1) + 16, CELL * (ROWS - 1) + 16);
 
-    // ---- 横线（10 条） ----
+    // 横线（10 条）
     p.setPen(gridPen);
     for (int r = 0; r < ROWS; r++) {
         QPoint left  = boardToPixel(r, 0);
@@ -123,25 +128,22 @@ void BoardWidget::drawBoard(QPainter& p) {
         p.drawLine(left.x(), left.y(), right.x(), right.y());
     }
 
-    // ---- 竖线（9 条） ----
-    // 中间 5 条竖线在河界处断开（第 4 行和第 5 行之间）
+    // 竖线（9 条）—— 中间的在河界处断开
     for (int c = 0; c < COLS; c++) {
         if (c == 0 || c == COLS - 1) {
-            // 左右边界：通长竖线
-            QPoint top = boardToPixel(0, c);
-            QPoint bot = boardToPixel(ROWS - 1, c);
+            // 左右边界：一整条线
+            QPoint top = boardToPixel(0, c), bot = boardToPixel(ROWS - 1, c);
             p.drawLine(top.x(), top.y(), bot.x(), bot.y());
         } else {
-            // 其他：上半段 + 下半段，中间（河）断开
-            QPoint top1 = boardToPixel(0, c),  top2 = boardToPixel(4, c);
-            p.drawLine(top1.x(), top1.y(), top2.x(), top2.y());
-            QPoint bot1 = boardToPixel(5, c),  bot2 = boardToPixel(ROWS - 1, c);
-            p.drawLine(bot1.x(), bot1.y(), bot2.x(), bot2.y());
+            // 其余：上半段 + 下半段（第4-5行之间断开 = 河界）
+            QPoint t1 = boardToPixel(0, c), t2 = boardToPixel(4, c);
+            p.drawLine(t1.x(), t1.y(), t2.x(), t2.y());
+            QPoint b1 = boardToPixel(5, c), b2 = boardToPixel(ROWS - 1, c);
+            p.drawLine(b1.x(), b1.y(), b2.x(), b2.y());
         }
     }
 
-    // ---- 九宫格交叉斜线 ----
-    // 用 lambda 避免重复代码
+    // 九宫格斜线（lambda 避免画上下九宫时重复代码）
     QPen dashPen(QColor(80, 50, 20), 1.2);
     p.setPen(dashPen);
     auto drawPalace = [&](int r1, int r2) {
@@ -150,90 +152,63 @@ void BoardWidget::drawBoard(QPainter& p) {
         p.drawLine(tl.x(), tl.y(), br.x(), br.y());
         p.drawLine(tr.x(), tr.y(), bl.x(), bl.y());
     };
-    drawPalace(0, 2);    // 黑方九宫（上方）
-    drawPalace(7, 9);    // 红方九宫（下方）
+    drawPalace(0, 2);   // 黑方九宫（上方，第0-2行）
+    drawPalace(7, 9);   // 红方九宫（下方，第7-9行）
 
-    // ---- 楚河 汉界 ----
+    // 楚河 汉界
     p.setFont(QFont("楷体", 22, QFont::Bold));
     p.setPen(QColor(60, 30, 10));
-    QPoint riverL = boardToPixel(4, 0);
-    QPoint riverR = boardToPixel(5, COLS - 1);
-    int riverY = (riverL.y() + riverR.y()) / 2;   // 河界中线 Y 坐标
-    int cx = MARGIN + CELL * (COLS - 1) / 2;       // 棋盘水平中点
-    p.drawText(cx - CELL * 2, riverY - 4, "楚  河");  // 左半写"楚河"
-    p.drawText(cx + CELL * 1, riverY - 4, "汉  界");  // 右半写"汉界"
+    QPoint rL = boardToPixel(4, 0), rR = boardToPixel(5, COLS - 1);
+    int ry = (rL.y() + rR.y()) / 2;
+    int cx = MARGIN + CELL * (COLS - 1) / 2;
+    p.drawText(cx - CELL * 2, ry - 4, "楚  河");
+    p.drawText(cx + CELL * 1, ry - 4, "汉  界");
 }
 
-/*
- * drawHighlights —— 画选中高亮和合法走法提示
- * --------------------------------------------------
- * 选中棋子：黄色光圈（像荧光笔圈起来）
- * 合法走法-空位：绿色小圆点（提示可以走到这里）
- * 合法走法-吃子：红色圈（提示可以吃掉这个棋子）
- *
- * QPen   = 边框(颜色+粗细)，QPen(Qt::NoPen) 表示不要边框
- * QBrush = 填充(颜色+透明度)，alpha=60 表示很透明
- */
-void BoardWidget::drawHighlights(QPainter& p) {
-    if (m_selected.getX() < 0) return;   // 没选中棋子，不画高亮
+// =========================== 高亮提示 ===========================
 
-    // 选中的棋子 — 黄色半透明圈
+void BoardWidget::drawHighlights(QPainter& p) {
+    if (m_selected.getX() < 0) return;   // 没选中棋子，不画
+
+    // 选中棋子 — 黄色半透明光圈
     QPoint sel = boardToPixel(m_selected.getX(), m_selected.getY());
-    p.setPen(QPen(QColor(255, 215, 0), 3));       // 金色边框
-    p.setBrush(QColor(255, 255, 0, 60));           // 黄色半透明填充
+    p.setPen(QPen(QColor(255, 215, 0), 3));     // 金色边框（RGB 255,215,0）
+    p.setBrush(QColor(255, 255, 0, 60));         // 黄色半透明（alpha=60）
     p.drawEllipse(QPointF(sel), PIECE_R + 3, PIECE_R + 3);
 
-    // 合法走法列表
+    // 合法走法提示
     for (const auto& mv : m_validMoves) {
         QPoint pt = boardToPixel(mv.getX(), mv.getY());
         ChessPiece* piece = m_game->getBoard().getPieceAt(mv);
 
         if (piece) {
-            // 该位置有敌方棋子（可以吃）— 红色圈
+            // 可吃子 → 红色圈
             p.setPen(QPen(QColor(220, 50, 50), 3));
             p.setBrush(QColor(255, 100, 100, 60));
         } else {
-            // 该位置为空 — 绿色小圆点
-            p.setPen(Qt::NoPen);                    // 不要边框
+            // 空位 → 绿色小圆点（无边框）
+            p.setPen(Qt::NoPen);
             p.setBrush(QColor(0, 180, 0, 120));
         }
-        // 吃子画大圈，空位画小圆点
-        p.drawEllipse(QPointF(pt),
-                      piece ? PIECE_R + 3 : 8,
-                      piece ? PIECE_R + 3 : 8);
+        p.drawEllipse(QPointF(pt), piece ? PIECE_R + 3 : 8, piece ? PIECE_R + 3 : 8);
     }
 }
 
-/*
- * drawPieces —— 画棋子
- * ------------------------------------------------
- * 每个棋子是一个圆形：
- *   1. 用 QRadialGradient 做径向渐变（中心亮→边缘暗，模拟立体感）
- *   2. 画外圈边框
- *   3. 写文字（帅/将/仕/士...），红方用红色字，黑方用黑色字
- *
- * QRadialGradient：径向渐变，从圆心向外辐射。
- *   参数 center = 圆心像素坐标，radius = 渐变半径。
- *   setColorAt(0, ...) = 圆心处的颜色（亮）
- *   setColorAt(1, ...) = 边缘处的颜色（暗）
- *
- * Qt::AlignCenter：文字居中对齐。
- */
+// =========================== 棋子绘制 ===========================
+
 void BoardWidget::drawPieces(QPainter& p) {
     if (!m_game) return;
-
     const Board& board = m_game->getBoard();
-    p.setFont(QFont("楷体", 22, QFont::Bold));   // 棋子用 22 号楷体
+    p.setFont(QFont("楷体", 22, QFont::Bold));
 
-    // 遍历棋盘的 10×9 每个格子
     for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c < COLS; c++) {
             ChessPiece* piece = board.getPieceAt({r, c});
-            if (!piece) continue;    // 空位跳过
+            if (!piece) continue;
 
             QPoint center = boardToPixel(r, c);
 
-            // 径向渐变模拟木制棋子立体感
+            // 径向渐变——中心亮边缘暗，模拟木制棋子立体感
             QRadialGradient grad(center, PIECE_R);
             grad.setColorAt(0, QColor(255, 245, 220));  // 中心：浅米色
             grad.setColorAt(1, QColor(200, 160, 100));  // 边缘：深木色
@@ -243,21 +218,13 @@ void BoardWidget::drawPieces(QPainter& p) {
             p.setPen(QPen(QColor(80, 50, 20), 2));
             p.drawEllipse(QPointF(center), PIECE_R, PIECE_R);
 
-            // 文字 — std::string → QString 转换
-            std::string sym = piece->getSymbol();
-            QString text = QString::fromStdString(sym);
+            // 棋子文字
+            QString text = QString::fromStdString(piece->getSymbol());
+            // 红方暗红，黑方纯黑
+            p.setPen(piece->getColor() == Color::RED
+                     ? QColor(180, 30, 30) : QColor(20, 20, 20));
 
-            // 红方用深红色，黑方用纯黑色
-            QColor textColor = (piece->getColor() == Color::RED)
-                               ? QColor(180, 30, 30)   // 红方：暗红
-                               : QColor(20, 20, 20);    // 黑方：黑色
-            p.setPen(textColor);
-
-            /*
-             * QRect(x, y, w, h) 创建一个以棋子圆心为中心的矩形区域。
-             * Qt::AlignCenter 让文字在这个区域内水平和垂直都居中。
-             * 矩形的宽高 = 棋子直径（PIECE_R*2）
-             */
+            // QRect 定义文字区域，Qt::AlignCenter 水平+垂直居中
             p.drawText(QRect(center.x() - PIECE_R, center.y() - PIECE_R,
                              PIECE_R * 2, PIECE_R * 2),
                        Qt::AlignCenter, text);
@@ -265,33 +232,23 @@ void BoardWidget::drawPieces(QPainter& p) {
     }
 }
 
-// =========================== 鼠标交互 ===========================
+// =========================== 鼠标走棋 ===========================
 
 /*
- * mousePressEvent —— 鼠标点击处理
- * ------------------------------------------------
- * Qt 把鼠标操作封装成 QMouseEvent 对象。
- * event->pos() 返回点击位置在控件内的像素坐标。
+ * 鼠标点击处理逻辑（四种情况）：
  *
- * 处理逻辑分四种情况：
- *
- *   [当前状态]              [点击了]           → [结果]
- *   ───────────────────────────────────────────────────
- *   未选中棋子              己方棋子           → 选中它，显示合法走法
- *   未选中棋子              空地/敌方棋子       → 什么都不做
- *   已选中棋子              同一棋子           → 取消选中
- *   已选中棋子              另一己方棋子        → 切换选中
- *   已选中棋子              合法走法目标        → 执行走棋
- *   已选中棋子              其他位置            → 取消选中
- *
- * emit moveMade() / emit gameOverSignal()
- *   发射 Qt 信号，MainWindow 连接了这些信号来更新 UI。
- *   信号-槽是 Qt 最核心的通信机制：一个对象发信号，另一个对象接收。
+ *   [当前状态]        → [点击位置]        → [结果]
+ *   ─────────────────────────────────────────────────
+ *   未选中            己方棋子            选中它，显示合法走法
+ *   未选中            空/敌方棋           无操作
+ *   已选中棋子A       棋子A本身           取消选中
+ *   已选中棋子A       己方棋子B           切换选中到 B
+ *   已选中棋子A       合法目标(空位/敌)   执行走棋，清除选中
+ *   已选中棋子A       非法位置            取消选中
  */
 void BoardWidget::mousePressEvent(QMouseEvent *event) {
-    // 游戏已结束或无游戏对象：把事件交给父类处理（什么都不做）
     if (!m_game || m_game->isGameOver()) {
-        QWidget::mousePressEvent(event);
+        QWidget::mousePressEvent(event);  // 交给父类默认处理
         return;
     }
 
@@ -300,21 +257,14 @@ void BoardWidget::mousePressEvent(QMouseEvent *event) {
 
     ChessPiece* clickedPiece = m_game->getBoard().getPieceAt(clicked);
 
-    // ===== 情况1：没有选中棋子 → 选中己方棋子 =====
+    // 情况1：没有选中 → 选中己方棋子
     if (m_selected.getX() < 0) {
-        // 只有当前走棋方的棋子才能被选中
         if (clickedPiece && clickedPiece->getColor() == m_game->getCurrentPlayer()) {
-            m_selected = clicked;    // 记录选中位置
+            m_selected = clicked;
             m_validMoves.clear();
-
-            // 获取这个棋子理论上能走的所有位置
+            // 获取该棋子理论上能走的所有位置
             auto all = clickedPiece->getValidMoves(m_game->getBoard());
-            /*
-             * 过滤掉"走了之后己方被将军"的非法走法。
-             * （比如自己的将面前有个車，就不能把挡着的士移开）
-             *
-             * wouldKingBeInCheck：模拟走这一步，判断走完后己方将帅是否被攻击
-             */
+            // 过滤掉走后被将军的违规走法
             for (const auto& mv : all) {
                 Game::Move m{m_selected, mv};
                 ChessPiece* moved = m_game->getBoard().getPieceAt(m_selected);
@@ -324,17 +274,14 @@ void BoardWidget::mousePressEvent(QMouseEvent *event) {
                     m_validMoves.push_back(mv);
             }
         }
-        update();   // 触发重绘，显示高亮
+        update();
         return;
     }
 
-    // ===== 情况2：点击已选中的棋子 → 取消选中 =====
-    if (clicked == m_selected) {
-        clearSelection();
-        return;
-    }
+    // 情况2：点同一棋子 → 取消选中
+    if (clicked == m_selected) { clearSelection(); return; }
 
-    // 点击己方另一棋子 → 切换选中
+    // 点己方另一棋子 → 切换选中
     if (clickedPiece && clickedPiece->getColor() == m_game->getCurrentPlayer()) {
         m_selected = clicked;
         m_validMoves.clear();
@@ -351,20 +298,20 @@ void BoardWidget::mousePressEvent(QMouseEvent *event) {
         return;
     }
 
-    // ===== 情况3：点击合法走法目标 → 执行走棋 =====
+    // 情况3：点在合法目标上 → 走棋
     bool isLegal = false;
     for (const auto& mv : m_validMoves) {
         if (clicked == mv) { isLegal = true; break; }
     }
     if (isLegal) {
-        m_game->makeMove(m_selected, clicked);   // 调用游戏逻辑走棋
-        clearSelection();                        // 清除选中状态
-        emit moveMade();                         // 发射信号：走了一步棋
+        m_game->makeMove(m_selected, clicked);
+        clearSelection();
+        emit moveMade();         // 通知 MainWindow "走了一步棋"
         if (m_game->isGameOver())
-            emit gameOverSignal();               // 发射信号：游戏结束（将死）
+            emit gameOverSignal();  // 通知 MainWindow "将死了"
         return;
     }
 
-    // ===== 情况4：其他（无效点击） → 取消选中 =====
+    // 情况4：其他 → 取消选中
     clearSelection();
 }
