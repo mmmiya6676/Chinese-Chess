@@ -64,24 +64,12 @@ int main(int argc, char *argv[]) {
             NewGameDialog nameDlg;
             if (nameDlg.exec() == QDialog::Accepted) {
                 // 用输入的名字创建主游戏窗口
-                MainWindow w(nameDlg.redName(), nameDlg.blackName());
-
-                /*
-                 * show()：显示窗口（非模态，不阻塞代码执行）
-                 * 与 exec() 不同，show() 不会进入事件循环，
-                 * 控制权仍然在调用方。
-                 */
-                w.show();
-
-                /*
-                 * app.exec()：进入 Qt 主事件循环。
-                 *   这个函数会"卡住"直到所有窗口关闭或调用 QApplication::quit()。
-                 *   w.show() 只显示窗口，事件循环从 app.exec() 开始。
-                 *
-                 *   当 MainWindow 关闭（w.close()），app.exec() 返回，
-                 *   程序继续执行 switch 后面的代码 → while 循环回到开头 →
-                 *   再次显示初始菜单。
-                 */
+                MainWindow *w = nameDlg.isAIMode()
+                    ? new MainWindow(nameDlg.redName(), nameDlg.aiDifficulty())
+                    : new MainWindow(nameDlg.redName(), nameDlg.blackName());
+                w->setAttribute(Qt::WA_DeleteOnClose);
+                w->show();
+                // 进入 Qt 主事件循环，窗口关闭后返回，回到初始菜单
                 app.exec();
             }
             break;

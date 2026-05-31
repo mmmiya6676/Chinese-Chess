@@ -8,47 +8,35 @@
 #include <string>
 #include "boardwidget.h"   // 我们的棋盘控件
 #include "Game.h"          // 游戏逻辑
+#include "ChessAI.h"       // AI 引擎
 
 /*
- * MainWindow —— 主游戏窗口
+ * MainWindow —— 主游戏窗口（含 AI 人机对战）
  * ------------------------------------
- * 继承 QMainWindow，是玩家进入游戏后的主界面。
- * 布局从上到下：
- *   [设置]                     步数: 5
- *          黑方: 玩家名
- *          剩余 85 秒
- *        ┌─── 棋盘 ───┐
- *        │            │
- *        └────────────┘
- *          剩余 80 秒
- *          红方: 玩家名
- *      [悔棋] [下一步] [投降]
+ * 三种构造函数：
+ *   1. 双人对战：传入红方名、黑方名
+ *   2. 人机对战：传入红方名、AI 难度
+ *   3. 读档游戏：传入存档文件路径
  *
- * 计时机制：
- *   用 QTimer 每 1000 毫秒（1 秒）触发一次 onTimerTick()，
- *   减少当前走棋方的剩余时间，到 0 则判负。
- *
- * 两个构造函数：
- *   新建游戏：传入红方名、黑方名
- *   读档游戏：传入存档文件路径
- *
- * 信号-槽简介（Qt 核心机制）：
- *   信号(signal)：一个对象发出通知，如 BoardWidget 说"我走了一步棋"
- *   槽(slot)：另一个对象响应通知，如 MainWindow 收到后更新计时和步数
- *   连接(connect)：signal → slot 的绑定
- *   例如：connect(m_board, &BoardWidget::moveMade, this, &MainWindow::onMoveMade);
+ * AI 驱动机制：
+ *   人类走棋 → onMoveMade() → 判断是否 AI 回合 →
+ *   QTimer::singleShot(500ms) → doAIMove() →
+ *   AI 走完 → onMoveMade() → 回到人类回合
  */
 class MainWindow : public QMainWindow {
     Q_OBJECT    // Qt 元对象宏，启用信号/槽
 public:
-    // 新建游戏
+    // 双人对战
     explicit MainWindow(const QString& redName, const QString& blackName,
+                        QWidget *parent = nullptr);
+    // 人机对战（redName=人类, AI 执黑）
+    explicit MainWindow(const QString& redName, AIDifficulty diff,
                         QWidget *parent = nullptr);
     // 从存档加载
     explicit MainWindow(const std::string& saveFile, QWidget *parent = nullptr);
     ~MainWindow() override;
 
-private slots:                     // Qt 槽函数 —— 被信号触发后调用的函数
+private slots:
     void onTimerTick();            // QTimer 超时回调 → 减少剩余时间
     void onMoveMade();             // 走了一步棋 → 重置计时、更新步数
     void onGameOver();             // 将死 → 停止计时、弹出结果
@@ -59,37 +47,40 @@ private slots:                     // Qt 槽函数 —— 被信号触发后调�
     void onSave();                 // 保存游戏 → 写入存档文件
     void onLeaderboard();          // 打开排行榜弹窗
     void onQuit();                 // 退出游戏 → 确认后关闭窗口
+    void doAIMove();               // AI 计算并走一步（通过 QTimer::singleShot 延迟调用）
 
 private:
-    void setupUI();                // 搭建界面布局（创建控件、摆放位置）
-    void setupStyle();             // 设置 QSS 样式表（颜色、字体等）
-    void updateDisplay();          // 刷新所有界面文字（计时、步数、按钮状态）
+    void setupUI();                // 搭建界面布局
+    void setupStyle();             // 设置 QSS 样式表
+    void updateDisplay();          // 刷新所有界面文字
     void resetTimer();             // 重置当前走棋方的倒计时为 90 秒
-    void showResult(const QString& msg);               // 弹出游戏结果
-    void saveFileAndRecord(const std::string& loser);  // 保存游戏 + 记录战绩
+    void showResult(const QString& msg);
+    void saveFileAndRecord(const std::string& loser);
 
-    // ---- 控件成员 ----
-    BoardWidget *m_board;          // 棋盘控件（自定义 QWidget）
-    Game *m_game;                  // 游戏逻辑对象（堆分配，析构时 delete）
+    BoardWidget *m_board;
+    Game *m_game;
 
-    QLabel *m_blackNameLabel;      // 显示黑方玩家名
-    QLabel *m_redNameLabel;        // 显示红方玩家名
-    QLabel *m_blackTimer;          // 黑方倒计时 "剩余 85 秒"
-    QLabel *m_redTimer;            // 红方倒计时
-    QLabel *m_moveCount;           // 步数 "步数: 5"
-    QLabel *m_turnDot;             // 当前走棋方指示（红点/黑点）
+    QLabel *m_blackNameLabel;
+    QLabel *m_redNameLabel;
+    QLabel *m_blackTimer;
+    QLabel *m_redTimer;
+    QLabel *m_moveCount;
+    QLabel *m_turnDot;
 
-    QPushButton *m_undoBtn;        // 悔棋按钮
-    QPushButton *m_redoBtn;        // 下一步按钮
-    QPushButton *m_surrenderBtn;   // 投降按钮
-    QPushButton *m_settingsBtn;    // 设置按钮
+    QPushButton *m_undoBtn;
+    QPushButton *m_redoBtn;
+    QPushButton *m_surrenderBtn;
+    QPushButton *m_settingsBtn;
 
-    // ---- 计时成员 ----
-    QTimer *m_timer;               // Qt 定时器，每 1000ms 触发一次
-    int m_redTime;                 // 红方剩余秒数
-    int m_blackTime;               // 黑方剩余秒数
-    QString m_redName;             // 红方玩家名
-    QString m_blackName;           // 黑方玩家名
+    QTimer *m_timer;
+    int m_redTime;
+    int m_blackTime;
+    QString m_redName;
+    QString m_blackName;
+
+    // ---- AI 成员 ----
+    ChessAI *m_ai = nullptr;       // AI 引擎（仅人机模式启用）
+    bool m_aiMode = false;         // 是否人机对战模式
 };
 
 #endif

@@ -56,6 +56,41 @@ MainWindow::MainWindow(const QString& redName, const QString& blackName, QWidget
 }
 
 /*
+ * 人机对战构造函数
+ *
+ * 红方 = 人类玩家，黑方 = AI（电脑）。
+ * AI 难度通过 NewGameDialog 选择后传入。
+ */
+MainWindow::MainWindow(const QString& redName, AIDifficulty diff, QWidget *parent)
+    : QMainWindow(parent), m_redName(redName), m_blackName("电脑 (AI)"), m_aiMode(true)
+{
+    m_game = new Game;
+    m_game->start();
+    m_redTime   = MOVE_TIME_LIMIT;
+    m_blackTime = MOVE_TIME_LIMIT;
+
+    // 存档文件名
+    int redID   = getOrCreatePlayerID(redName.toStdString());
+    int blackID = getOrCreatePlayerID("AI");
+    int playN   = nextPlayNumber(redID, blackID);
+    m_game->setSaveFilename(buildSaveFilename(redID, blackID, playN));
+
+    // 初始化 AI（执黑）
+    m_ai = new ChessAI(Color::BLACK);
+    m_ai->setDifficulty(diff);
+
+    setupUI();
+    setupStyle();
+    m_board->setGame(m_game);
+
+    m_timer = new QTimer(this);
+    connect(m_timer, &QTimer::timeout, this, &MainWindow::onTimerTick);
+    m_timer->start(1000);
+
+    // 红方（人类）先走，AI 等待
+}
+
+/*
  * 读档游戏构造函数
  * 流程跟新建差不多，区别是第一步调用 loadGame 加载存档，
  * 而不是 start() 初始化棋盘。
@@ -92,6 +127,7 @@ MainWindow::MainWindow(const std::string& saveFile, QWidget *parent)
  */
 MainWindow::~MainWindow() {
     delete m_game;
+    delete m_ai;
 }
 
 // =========================== UI 搭建 ===========================
@@ -309,8 +345,22 @@ void MainWindow::onTimerTick() {
 
 // =========================== 走棋/游戏结束回调 ===========================
 
-// BoardWidget 发来 "走了一步棋" → 重置倒计时
-void MainWindow::onMoveMade() { resetTimer(); updateDisplay(); }
+// BoardWidget 发来 "走了一步棋" → 重置倒计时，然后触发 AI
+void MainWindow::onMoveMade() {
+    resetTimer();
+    updateDisplay();
+
+    // 人机模式：如果轮到 AI 走棋，延迟 300ms 触发（先让界面刷新）
+    if (m_aiMode && !m_game->isGameOver() &&
+        m_game->getCurrentPlayer() == Color::BLACK) {
+        // 禁用按钮，防止人类在 AI 思考时操作
+        m_undoBtn->setEnabled(false);
+        m_redoBtn->setEnabled(false);
+        m_surrenderBtn->setEnabled(false);
+        // QTimer::singleShot 是一次性定时器，300ms 后调用 doAIMove
+        QTimer::singleShot(300, this, &MainWindow::doAIMove);
+    }
+}
 
 // BoardWidget 发来 "将死了" → 停止计时、显示结果、记录战绩
 void MainWindow::onGameOver() {
@@ -411,4 +461,40 @@ void MainWindow::saveFileAndRecord(const std::string& loser) {
                              ? m_blackName.toStdString() : m_redName.toStdString();
     // recordGameResult(红方名, 黑方名, 胜者名) — 红黑顺序不变
     recordGameResult(m_redName.toStdString(), m_blackName.toStdString(), winnerName);
+}
+
+// =========================== AI 走棋 ===========================
+
+/*
+ * doAIMove —— AI 计算最佳走法并执行
+ *
+ * 这个函数由 QTimer::singleShot 延迟调用，确保：
+ *   1. 人类的走棋已经在界面上显示
+ *   2. 事件循环处理完界面刷新后再开始思考
+ *
+ * AI 走完后调用 makeMove → BoardWidget 发射 moveMade →
+ * onMoveMade 再次触发 → 回到人类回合。
+ */
+void MainWindow::doAIMove() {
+    if (!m_ai || m_game->isGameOver()) return;
+
+    ChessAI::AIMove best = m_ai->findBestMove(*m_game);
+
+    // AI 无合法走法（将死/困毙）→ 人类获胜
+    if (best.from.getX() < 0) {
+        m_timer->stop();
+        showResult(QString("电脑无子可走！%1 获胜！").arg(m_redName));
+        saveFileAndRecord("电脑 (AI)");
+        return;
+    }
+
+    m_game->makeMove(best.from, best.to);
+    m_board->clearSelection();
+    m_board->update();   // 手动刷新棋盘
+
+    // 恢复按钮
+    updateDisplay();
+
+    if (m_game->isGameOver())
+        onGameOver();
 }

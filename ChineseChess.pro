@@ -9,6 +9,7 @@ CONFIG += c++17
 SOURCES += \
     main.cpp \
     src/boardwidget.cpp \
+    src/ChessAI.cpp \
     src/mainwindow.cpp \
     src/initialdialog.cpp \
     src/newgamedialog.cpp \
@@ -29,6 +30,7 @@ SOURCES += \
 
 HEADERS += \
     include/boardwidget.h \
+    include/ChessAI.h \
     include/mainwindow.h \
     include/initialdialog.h \
     include/newgamedialog.h \
