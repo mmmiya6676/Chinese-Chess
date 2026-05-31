@@ -456,10 +456,10 @@ void MainWindow::showResult(const QString& msg) {
 void MainWindow::saveFileAndRecord(const std::string& loser) {
     ensureDir("saves");
     m_game->saveGame("saves/" + m_game->getSaveFilename());
-    // 确定胜者名：输家是红方 → 胜者是黑方，反之亦然
+    // 人机对战不计入排行榜
+    if (m_aiMode) return;
     std::string winnerName = (loser == m_redName.toStdString())
                              ? m_blackName.toStdString() : m_redName.toStdString();
-    // recordGameResult(红方名, 黑方名, 胜者名) — 红黑顺序不变
     recordGameResult(m_redName.toStdString(), m_blackName.toStdString(), winnerName);
 }
 
