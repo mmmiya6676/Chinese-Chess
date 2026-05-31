@@ -7,6 +7,7 @@
 #include <QMessageBox>       // 消息弹窗（信息/警告/确认）
 #include <QMenu>             // 弹出菜单（设置按钮的下拉菜单）
 #include <QApplication>      // Qt 应用程序类
+#include <chrono>             // AI 思考计时
 // MOVE_TIME_LIMIT 定义在 Game.h 中 (90 秒)
 
 // =========================== 构造函数 ===========================
@@ -478,7 +479,29 @@ void MainWindow::saveFileAndRecord(const std::string& loser) {
 void MainWindow::doAIMove() {
     if (!m_ai || m_game->isGameOver()) return;
 
+    // ---- 计时处理 ----
+    // AI 思考期间事件循环被阻塞，onTimerTick() 无法触发，
+    // 所以需要手动记录思考耗时并扣除 AI 的时间。
+    auto thinkStart = std::chrono::steady_clock::now();
+    int& aiTimer = (m_game->getCurrentPlayer() == Color::RED) ? m_redTime : m_blackTime;
+
+    // AI 计算最佳走法
     ChessAI::AIMove best = m_ai->findBestMove(*m_game);
+
+    // 计算思考耗时（秒），从 AI 的剩余时间中扣除
+    auto thinkEnd = std::chrono::steady_clock::now();
+    int elapsed = std::chrono::duration_cast<std::chrono::seconds>(thinkEnd - thinkStart).count();
+    aiTimer -= elapsed;
+
+    // AI 超时判定
+    if (aiTimer <= 0) {
+        aiTimer = 0;
+        updateDisplay();
+        m_timer->stop();
+        showResult(QString("电脑超时！%1 获胜！").arg(m_redName));
+        saveFileAndRecord("电脑 (AI)");
+        return;
+    }
 
     // AI 无合法走法（将死/困毙）→ 人类获胜
     if (best.from.getX() < 0) {
@@ -488,11 +511,14 @@ void MainWindow::doAIMove() {
         return;
     }
 
+    // AI 走棋
     m_game->makeMove(best.from, best.to);
     m_board->clearSelection();
-    m_board->update();   // 手动刷新棋盘
+    m_board->update();
+    m_board->repaint();   // 立即刷新棋盘
 
-    // 恢复按钮
+    // 切回人类回合，重置人类计时
+    resetTimer();
     updateDisplay();
 
     if (m_game->isGameOver())
