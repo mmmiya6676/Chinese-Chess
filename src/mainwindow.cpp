@@ -389,7 +389,7 @@ void MainWindow::onSave() {
     ensureDir("saves");
     QString f = QString::fromStdString(m_game->getSaveFilename());
     QMessageBox::information(this, "保存",
-        m_game->saveGame("saves/" + f.toStdString()) ? QString("已保存: %1").arg(f) : "保存失败！");
+        m_game->saveGame(f.toStdString()) ? QString("已保存: %1").arg(f) : "保存失败！");
 }
 
 void MainWindow::onLeaderboard() {
@@ -410,7 +410,7 @@ void MainWindow::showResult(const QString& msg) {
 
 void MainWindow::saveFileAndRecord(const std::string& loser) {
     ensureDir("saves");
-    m_game->saveGame("saves/" + m_game->getSaveFilename());
+    m_game->saveGame(m_game->getSaveFilename());
     if (m_aiMode) return;   // 人机对战不计入排行榜
     std::string winnerName = (loser == m_redName.toStdString())
                              ? m_blackName.toStdString() : m_redName.toStdString();

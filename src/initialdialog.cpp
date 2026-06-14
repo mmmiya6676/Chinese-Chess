@@ -29,16 +29,12 @@
  *   - connect(发送者, 信号, 接收者, 槽)：
  *     把信号和槽"绑"在一起。
  *
- *   connect 的语法（两种形式）：
- *     ① 旧式：connect(sender, SIGNAL(clicked()), receiver, SLOT(accept()));
- *        （字符串匹配，写错了编译不报错，Qt5 开始不推荐）
- *
- *     ② 新式（我们用的）：
+ *     新式（我们用的）：
  *        connect(sender, &SenderClass::signalName,
  *                receiver, &ReceiverClass::slotName);
  *        （编译期类型检查，写错了编译报错，更安全）
  *
- *     ③ 用 lambda（匿名函数）做槽（我们主要用的）：
+ *     用 lambda（匿名函数）做槽（我们主要用的）：
  *        connect(sender, &SenderClass::signalName, this, [this]() {
  *            // 信号触发时要执行的代码
  *        });
@@ -89,7 +85,7 @@ InitialDialog::InitialDialog(QWidget *parent) : QDialog(parent) {
         "QLabel#title { font: bold 28px '楷体'; color: #5a3520; padding: 20px; }"
         "QPushButton { font: bold 16px '楷体'; padding: 12px 40px; margin: 6px 30px;"
         "  background-color: #8b7355; color: #fff8f0; border: 2px solid #6b5345; border-radius: 6px; }"
-        "QPushButton:hover { background-color: #6b5345; }"
+        "QPushButton:hover { background-color: #6c5446; }"
     );
 
     /*
