@@ -179,7 +179,7 @@ void recordGameResult(const string& red, const string& black,
                       const string& winner) {
     ensureDir("saves");
     auto data = loadLeaderboard();
-    bool redWin = (winner == "红" || winner == "RED");
+    bool redWin = (winner == red);
     updatePlayer(data, red,   redWin);
     updatePlayer(data, black, !redWin);
     saveLeaderboard(data);
