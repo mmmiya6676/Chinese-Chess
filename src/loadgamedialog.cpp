@@ -37,18 +37,41 @@ LoadGameDialog::LoadGameDialog(QWidget *parent) : QDialog(parent) {
 
     /*
      * listSaveFiles() 扫描 saves/ 目录下所有 .txt 文件，
-     * 返回排序后的文件名列表（不含路径前缀）。
+     * 返回排序后的文件名列表。
      *
-     * 显示时去掉 ".txt" 后缀让列表更干净。
-     * m_files 和 m_list 通过行号（index）对应：
-     *   m_files[0] = "1_vs_2_play1.txt"
-     *   m_list 第0行显示 "1_vs_2_play1"
+     * 文件名格式：1_vs_2_play1.txt（红方ID_vs_黑方ID_play编号.txt）
+     * 显示时：
+     *   1. 去掉 ".txt" 后缀
+     *   2. 用玩家注册表把数字 ID 翻译成中文名
+     *   例如：1_vs_2_play1 → 张三 vs 李四 play1
      */
     m_files = listSaveFiles();
+
+    // 读取玩家注册表（ID → 名字映射）
+    auto reg = loadPlayerRegistry();
+
     for (const auto& f : m_files) {
         std::string display = f;
+        // 去掉 ".txt" 后缀
         if (display.size() > 4 && display.substr(display.size() - 4) == ".txt")
             display = display.substr(0, display.size() - 4);
+
+        // 尝试解析 "1_vs_2_play1" 格式 → "张三 vs 李四 play1"
+        size_t vsPos   = display.find("_vs_");
+        size_t playPos = display.find("_play");
+        if (vsPos != std::string::npos && playPos != std::string::npos) {
+            try {
+                int rid = stoi(display.substr(0, vsPos));
+                int bid = stoi(display.substr(vsPos + 4, playPos - vsPos - 4));
+                std::string rn = reg.count(rid) ? reg[rid] : ("玩家" + std::to_string(rid));
+                std::string bn = reg.count(bid) ? reg[bid] : ("玩家" + std::to_string(bid));
+                // 格式：张三 vs 李四 play1
+                display = rn + " vs " + bn + " " + display.substr(playPos + 1);
+            } catch (...) {
+                // 解析失败就用原始显示名
+            }
+        }
+
         m_list->addItem(QString::fromStdString(display));
     }
     if (m_files.empty())

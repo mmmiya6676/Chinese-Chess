@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 // 扫描 saves/ 目录下所有 .txt 文件，返回排序后的文件名列表
 std::vector<std::string> listSaveFiles();
@@ -30,5 +31,8 @@ struct LeaderboardEntry {
     int total = 0;
 };
 std::vector<LeaderboardEntry> loadLeaderboardData();
+
+// 读玩家注册表（ID → 名字），loadgamedialog 用来翻译存档文件名的数字 ID
+std::map<int, std::string> loadPlayerRegistry();
 
 #endif // SAVEMANAGER_H

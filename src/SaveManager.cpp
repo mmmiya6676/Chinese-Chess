@@ -65,7 +65,7 @@ int extractPlayNumber(const string& filename) {
 
 static const string PLAYERS_FILE = "saves/players.dat";
 
-static map<int, string> loadPlayerRegistry() {
+map<int, string> loadPlayerRegistry() {
     map<int, string> result;
     ifstream file(PLAYERS_FILE);
     if (!file) return result;
